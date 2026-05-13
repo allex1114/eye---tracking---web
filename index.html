@@ -28,7 +28,7 @@ html, body {
 /* ── PHASES ── */
 .phase { display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; }
 .phase.active { display:flex; }
-
+ 
 /* ── INTRO ── */
 .intro-card {
   max-width:560px; width:90%;
@@ -81,7 +81,7 @@ h1 {
 }
 .btn-kakao:hover { background:#f0d800; transform:translateY(-2px); box-shadow:0 6px 20px rgba(254,229,0,.35); }
 .btn-kakao:active { transform:none; }
-
+ 
 /* ── SETUP ── */
 #phase-setup { gap:16px; padding:20px; }
 .setup-title { text-align:center; }
@@ -106,7 +106,7 @@ h1 {
 .dot.ok { background:var(--success); box-shadow:0 0 8px var(--success); }
 .dot.err { background:var(--danger); box-shadow:0 0 8px var(--danger); }
 #status-text { font-size:.9rem; }
-
+ 
 /* ── TEST ── */
 #phase-test { padding:0; overflow:hidden; }
 #test-canvas { position:absolute; inset:0; width:100%; height:100%; }
@@ -132,7 +132,7 @@ h1 {
 .hud-item { text-align:center; }
 .hud-label { font-size:.65rem; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px; }
 .hud-val { font-size:1.1rem; font-weight:700; font-family:'Courier New',monospace; color:var(--accent); }
-
+ 
 /* ── RESULTS ── */
 #phase-results { overflow-y:auto; padding:24px 16px; align-items:flex-start; }
 .results-inner {
@@ -173,7 +173,7 @@ h1 {
 #res-chart { width:100%; display:block; }
 .res-footer { text-align:center; }
 .small-note { color:var(--dim); font-size:.74rem; margin-top:14px; line-height:1.5; }
-
+ 
 /* ── ANIMATIONS ── */
 @keyframes fadeUp {
   from { opacity:0; transform:translateY(16px); }
@@ -183,7 +183,7 @@ h1 {
   0%,100% { opacity:1; } 50% { opacity:.3; }
 }
 .blink { animation:blink 1.2s ease infinite; }
-
+ 
 /* ── LOADING OVERLAY ── */
 #loading {
   position:fixed; inset:0; z-index:100;
@@ -201,13 +201,13 @@ h1 {
 </style>
 </head>
 <body>
-
+ 
 <!-- LOADING -->
 <div id="loading">
   <div class="spinner"></div>
   <p style="color:var(--dim);font-size:.9rem;">MediaPipe 로딩 중...</p>
 </div>
-
+ 
 <!-- INTRO -->
 <div id="phase-intro" class="phase">
   <div class="intro-card">
@@ -227,7 +227,7 @@ h1 {
     <button class="btn" onclick="startSetup()">카메라 시작하기 →</button>
   </div>
 </div>
-
+ 
 <!-- SETUP -->
 <div id="phase-setup" class="phase">
   <div class="setup-title">
@@ -243,7 +243,7 @@ h1 {
   </div>
   <button class="btn" id="start-test-btn" onclick="startTest()" disabled>테스트 시작 →</button>
 </div>
-
+ 
 <!-- TEST -->
 <div id="phase-test" class="phase">
   <div class="progress-track"><div id="prog-bar"></div></div>
@@ -274,7 +274,7 @@ h1 {
     </div>
   </div>
 </div>
-
+ 
 <!-- RESULTS -->
 <div id="phase-results" class="phase">
   <div class="results-inner">
@@ -282,14 +282,14 @@ h1 {
       <h1 style="margin-bottom:6px;">검사 결과</h1>
       <p style="color:var(--dim);font-size:.88rem;">HGN 기반 안구 추적 분석 · <span id="res-samples">0</span>개 샘플 수집</p>
     </div>
-
+ 
     <div class="score-ring" id="score-ring">
       <div class="score-num" id="score-num">0</div>
       <div class="score-unit">IMPAIRMENT</div>
     </div>
-
+ 
     <div class="verdict" id="verdict-box">판정 중...</div>
-
+ 
     <div class="metric-grid">
       <div class="m-card">
         <div class="m-card-label">부드러운 추적 (Smooth Pursuit)</div>
@@ -312,12 +312,12 @@ h1 {
         <div class="m-bar"><div class="m-bar-fill" id="r-dev-bar" style="background:var(--accent2);width:0%"></div></div>
       </div>
     </div>
-
+ 
     <div class="chart-card">
       <div class="chart-title">▎ 자극 경로 vs 눈 추적 경로</div>
       <canvas id="res-chart" height="90"></canvas>
     </div>
-
+ 
     <div class="res-footer">
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:4px;">
         <button class="btn-kakao" onclick="shareResult()">
@@ -330,13 +330,13 @@ h1 {
     </div>
   </div>
 </div>
-
+ 
 <!-- hidden video -->
 <video id="video" style="display:none" playsinline muted></video>
-
+ 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-
+ 
 <script>
 'use strict';
 /* ================================================================
@@ -351,31 +351,31 @@ const CFG = {
   MIN_VALID        : 60,      // minimum valid samples to show results
   NYST_WIN         : 45,      // samples window for nystagmus detection
 };
-
+ 
 /* ================================================================
    STATE
    ================================================================ */
 let faceMesh    = null;
 let mpCam       = null;
 let phase       = 'loading';
-
+ 
 // Test
 let testActive  = false;
 let testStart   = 0;
 let rafId       = null;
 let samples     = [];   // { t, sx, ex, valid }
 let orientSign  = 0;    // +1 or -1 (mirroring correction)
-
+ 
 // Calibration data (first CFG.CALIB_DURATION_S s)
 let calibBuf    = [];   // { t, sx, ex }
-
+ 
 // MediaPipe output
 let lastLM      = null;
 let faceOK      = false;
-
+ 
 // Last result (for sharing)
 let lastResult  = null;
-
+ 
 /* ================================================================
    DOM
    ================================================================ */
@@ -386,7 +386,7 @@ const testCvs    = document.getElementById('test-canvas');
 const tctx       = testCvs.getContext('2d');
 const faceCvs    = document.getElementById('face-canvas');
 const fctx       = faceCvs.getContext('2d');
-
+ 
 /* ================================================================
    PHASE MANAGEMENT
    ================================================================ */
@@ -395,14 +395,14 @@ function setPhase(name) {
   document.getElementById('phase-' + name).classList.add('active');
   phase = name;
 }
-
+ 
 /* ================================================================
    SETUP PHASE
    ================================================================ */
 async function startSetup() {
   setPhase('setup');
   updateStatus('MediaPipe 초기화 중...', 'wait');
-
+ 
   try {
     faceMesh = new FaceMesh({
       locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
@@ -414,7 +414,7 @@ async function startSetup() {
       minTrackingConfidence  : 0.5,
     });
     faceMesh.onResults(onResults);
-
+ 
     mpCam = new Camera(video, {
       onFrame: async () => { if (faceMesh) await faceMesh.send({ image: video }); },
       width: 640, height: 480,
@@ -426,20 +426,20 @@ async function startSetup() {
     console.error(e);
   }
 }
-
+ 
 function updateStatus(msg, state) {
   document.getElementById('status-text').textContent = msg;
   const d = document.getElementById('status-dot');
   d.className = 'dot' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
 }
-
+ 
 /* ================================================================
    MEDIAPIPE CALLBACK
    ================================================================ */
 function onResults(res) {
   if (phase === 'setup') drawSetup(res);
   if (phase === 'test')  { drawPip(res); if (testActive) collectSample(res); }
-
+ 
   const hasFace = res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0;
   if (hasFace) {
     lastLM = res.multiFaceLandmarks[0];
@@ -457,7 +457,7 @@ function onResults(res) {
     }
   }
 }
-
+ 
 /* ================================================================
    SETUP CANVAS DRAWING
    ================================================================ */
@@ -465,7 +465,7 @@ function drawSetup(res) {
   const w = setupCvs.width, h = setupCvs.height;
   sctx.clearRect(0, 0, w, h);
   sctx.drawImage(video, 0, 0, w, h);
-
+ 
   if (!res.multiFaceLandmarks || !res.multiFaceLandmarks.length) {
     // guide box
     sctx.save();
@@ -488,7 +488,7 @@ function drawSetup(res) {
     drawIrisDot(sctx, lm[473], w, h, '#7c6bff', 7);  // right iris
   }
 }
-
+ 
 /* ================================================================
    PIP (face-cam during test)
    ================================================================ */
@@ -505,7 +505,7 @@ function drawPip(res) {
     }
   }
 }
-
+ 
 function drawEyeOutline(ctx, lm, w, h) {
   // Left eye contour
   const LE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
@@ -522,7 +522,7 @@ function drawEyeOutline(ctx, lm, w, h) {
     ctx.stroke();
   });
 }
-
+ 
 function drawIrisDot(ctx, lm, w, h, color, r) {
   ctx.beginPath();
   ctx.arc(lm.x*w, lm.y*h, r, 0, Math.PI*2);
@@ -532,7 +532,7 @@ function drawIrisDot(ctx, lm, w, h, color, r) {
   ctx.lineWidth = 1.2;
   ctx.stroke();
 }
-
+ 
 /* ================================================================
    TEST START
    ================================================================ */
@@ -547,7 +547,7 @@ function startTest() {
   testStart  = performance.now();
   rafId = requestAnimationFrame(testLoop);
 }
-
+ 
 /* ================================================================
    STIMULUS POSITION  (0–1 fraction of canvas width)
    ================================================================ */
@@ -559,7 +559,7 @@ function stimPos(t) {
   return 0.5 + CFG.STIM_AMPLITUDE *
     Math.sin(2 * Math.PI * CFG.STIM_FREQ_HZ * (t - CFG.CALIB_DURATION_S));
 }
-
+ 
 /* ================================================================
    SAMPLE COLLECTION
    ================================================================ */
@@ -567,7 +567,7 @@ function collectSample(res) {
   const t  = (performance.now() - testStart) / 1000;
   const sx = stimPos(t);
   let ex = null;
-
+ 
   if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
     const lm = res.multiFaceLandmarks[0];
     if (lm.length > 477) {
@@ -582,7 +582,7 @@ function collectSample(res) {
       const lnx = (li.x - (lL.x + lR.x)/2) / lw;
       const rnx = (ri.x - (rL.x + rR.x)/2) / rw;
       ex = (lnx + rnx) / 2;  // -∞..+∞ ; sober range ≈ ±0.5
-
+ 
       // Calibration phase: detect orientation sign
       if (t < CFG.CALIB_DURATION_S) {
         calibBuf.push({ t, sx, ex });
@@ -598,48 +598,48 @@ function collectSample(res) {
       }
     }
   }
-
+ 
   samples.push({ t, sx, ex, valid: ex !== null });
 }
-
+ 
 /* ================================================================
    TEST ANIMATION LOOP
    ================================================================ */
 function testLoop(now) {
   const elapsed = now - testStart;
   const t = elapsed / 1000;
-
+ 
   if (elapsed >= CFG.TEST_DURATION_MS) {
     testActive = false;
     finishTest();
     return;
   }
-
+ 
   // Progress
   document.getElementById('prog-bar').style.width = (elapsed / CFG.TEST_DURATION_MS * 100) + '%';
   document.getElementById('h-time').textContent = Math.ceil((CFG.TEST_DURATION_MS - elapsed) / 1000) + 's';
-
+ 
   drawTestFrame(t);
   updateHUD();
   rafId = requestAnimationFrame(testLoop);
 }
-
+ 
 /* ================================================================
    TEST CANVAS DRAWING
    ================================================================ */
 function drawTestFrame(t) {
   const W = testCvs.width, H = testCvs.height;
   const ctx = tctx;
-
+ 
   // Background
   ctx.fillStyle = '#06061a';
   ctx.fillRect(0, 0, W, H);
-
+ 
   // Horizon line
   ctx.strokeStyle = 'rgba(255,255,255,.04)';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
-
+ 
   // Range markers
   const lx = W * (0.5 - CFG.STIM_AMPLITUDE);
   const rx = W * (0.5 + CFG.STIM_AMPLITUDE);
@@ -649,7 +649,7 @@ function drawTestFrame(t) {
     ctx.beginPath(); ctx.moveTo(x, H/2-28); ctx.lineTo(x, H/2+28); ctx.stroke();
   });
   ctx.setLineDash([]);
-
+ 
   // Eye trail
   if (orientSign !== 0 && samples.length > 3) {
     const rec = samples.slice(-80).filter(s => s.valid);
@@ -665,26 +665,26 @@ function drawTestFrame(t) {
       ctx.stroke();
     }
   }
-
+ 
   // Stimulus dot
   const sx = W * stimPos(t);
   const sy = H / 2;
   const R  = CFG.DOT_R;
-
+ 
   // Glow
   const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, R*3.5);
   grd.addColorStop(0, 'rgba(124,107,255,.45)');
   grd.addColorStop(1, 'rgba(124,107,255,0)');
   ctx.beginPath(); ctx.arc(sx, sy, R*3.5, 0, Math.PI*2);
   ctx.fillStyle = grd; ctx.fill();
-
+ 
   // Dot body
   ctx.beginPath(); ctx.arc(sx, sy, R, 0, Math.PI*2);
   ctx.fillStyle = '#7c6bff'; ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2; ctx.stroke();
   ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI*2);
   ctx.fillStyle = '#fff'; ctx.fill();
-
+ 
   // Phase labels
   ctx.textAlign = 'center';
   if (t < CFG.CALIB_DURATION_S) {
@@ -702,7 +702,7 @@ function drawTestFrame(t) {
     ctx.fillText('머리는 고정 · 눈만 움직이세요', W/2, H/2 - 44);
   }
 }
-
+ 
 /* ================================================================
    LIVE HUD UPDATE
    ================================================================ */
@@ -710,21 +710,21 @@ function updateHUD() {
   if (orientSign === 0) return;
   const valid = samples.filter(s => s.valid).slice(-80);
   if (valid.length < 15) return;
-
+ 
   const sx = valid.map(s => s.sx);
   const ex = valid.map(s => s.ex * orientSign);
-
+ 
   const corr = pearson(sx, ex);
   const acc  = Math.max(0, Math.min(100, corr * 100));
-
+ 
   const nyst = nystagmusScore(valid);
   const delay = estimateDelay(sx, ex, valid);
-
+ 
   document.getElementById('h-acc').textContent   = acc.toFixed(0) + '%';
   document.getElementById('h-nyst').textContent  = nyst.toFixed(0) + '%';
   document.getElementById('h-delay').textContent = delay + ' ms';
 }
-
+ 
 /* ================================================================
    NYSTAGMUS SCORE  — high-frequency residual of eye velocity
    [FIX] 구버전: 단위가 다른 eye vel(눈 너비/s)과 stim vel(화면 너비/s)을
@@ -753,7 +753,7 @@ function nystagmusScore(data) {
   const noiseFloor = 0.05; // 카메라/얼굴인식 노이즈 허용치
   return Math.min(100, Math.max(0, (rms - noiseFloor) * 80));
 }
-
+ 
 /* ================================================================
    DELAY ESTIMATE — normalized cross-correlation, 500 ms cap
    [FIX] 구버전: 최대 탐색 범위가 전체 길이의 25% (최대 수천 ms),
@@ -776,34 +776,34 @@ function estimateDelay(sx, ex, data) {
   }
   return Math.round((bestLag / fps) * 1000);
 }
-
+ 
 /* ================================================================
    FINISH TEST → ANALYSIS
    ================================================================ */
 function finishTest() {
   cancelAnimationFrame(rafId);
   const valid = samples.filter(s => s.valid && s.t >= CFG.CALIB_DURATION_S);
-
+ 
   if (valid.length < CFG.MIN_VALID || orientSign === 0) {
     alert('데이터가 부족합니다 (유효 샘플: ' + valid.length + ').\n얼굴이 잘 인식되지 않았습니다. 다시 시도해주세요.');
     resetApp();
     return;
   }
-
+ 
   const sign = orientSign;
   const sx   = valid.map(s => s.sx);
   const ex   = valid.map(s => s.ex * sign);
-
+ 
   // ① Smooth Pursuit — Pearson r (가장 신뢰도 높은 지표)
   const corr    = pearson(sx, ex);
   const pursuit = Math.max(0, Math.min(100, corr * 100));
-
+ 
   // ② Nystagmus Intensity
   const nyst  = nystagmusScore(valid);
-
+ 
   // ③ Delay (ms) — 500 ms 상한 적용
   const delay = estimateDelay(sx, ex, valid);
-
+ 
   // ④ Path Deviation — Z-정규화로 스케일 불일치 해결
   // [FIX] 구버전: 눈(±0.3 eye-width 단위) - 자극(0~1 screen 단위) → 항상 큰 값
   // 신버전: 둘 다 Z-정규화 후 차이 계산. 정상 범위 ≈ 0.2~0.5 σ
@@ -812,7 +812,7 @@ function finishTest() {
   const devRaw = mean(devArr);
   // devRaw: 정상 ≈0.3~0.6, 취함 ≈1.2~2.0 → 0.3 이하는 0점, 1.8 이상은 100점
   const deviation = Math.min(100, Math.max(0, (devRaw - 0.3) / 1.5 * 100));
-
+ 
   // ⑤ Overall Impairment Score
   // [FIX] Smooth Pursuit 비중 상향(가장 신뢰도 높음), 딜레이·편차 하향
   const impairment = Math.round(
@@ -821,19 +821,19 @@ function finishTest() {
     Math.min(1, delay / 400) * 16 + // ↓ 22→16, 상한 350→400ms
     deviation         * 0.06     // ↓ 8→6
   );
-
+ 
   showResults({ pursuit, nyst, delay, deviation, impairment, samples: valid });
 }
-
+ 
 /* ================================================================
    RESULTS
    ================================================================ */
 function showResults(m) {
   setPhase('results');
   document.getElementById('res-samples').textContent = m.samples.length;
-
+ 
   const sc = Math.min(100, Math.max(0, m.impairment));
-
+ 
   // Color coding
   let color, label, verdict, vbg;
   if      (sc < 20) { color='#00d4aa'; label='정상';     verdict='✅ 음주 징후 없음 — 정상 범위의 안구 추적 능력입니다'; vbg='rgba(0,212,170,.08)'; }
@@ -841,7 +841,7 @@ function showResults(m) {
   else if (sc < 60) { color='#ff9800'; label='중등';     verdict='⚠️ 중등도 이상 — 안구진탕 및 추적 지연이 관찰됩니다'; vbg='rgba(255,152,0,.08)'; }
   else if (sc < 80) { color='#ff4757'; label='심함';     verdict='🔴 심한 이상 — 유의미한 안구진탕 및 추적 장애 관찰됨'; vbg='rgba(255,71,87,.08)'; }
   else              { color='#dc2626'; label='매우심함'; verdict='🔴 매우 심한 이상 — 안구 추적 능력이 크게 저하됨'; vbg='rgba(220,38,38,.08)'; }
-
+ 
   // Animate score ring
   const ring = document.getElementById('score-ring');
   ring.style.borderColor = color;
@@ -853,37 +853,37 @@ function showResults(m) {
     numEl.textContent = cur;
     if (cur >= sc) clearInterval(iv);
   }, 18);
-
+ 
   // Verdict
   const vb = document.getElementById('verdict-box');
   vb.textContent = verdict;
   vb.style.borderColor = color;
   vb.style.background  = vbg;
   vb.style.color       = color;
-
+ 
   // Metrics
   setMetric('r-pursuit', m.pursuit.toFixed(1) + '%', m.pursuit, '#00d4aa');
   setMetric('r-nyst',    m.nyst.toFixed(1)    + '%', m.nyst,    '#ffd166');
   setMetric('r-delay',   m.delay              + ' ms', Math.min(100,m.delay/3.5), '#7c6bff');
   setMetric('r-dev',     m.deviation.toFixed(1) + '%', m.deviation, '#ff6b9d');
-
+ 
   // Store for sharing
   lastResult = { ...m, verdict, sc };
-
+ 
   // Chart
   setTimeout(() => drawChart(m.samples), 200);
 }
-
+ 
 /* ================================================================
    KAKAO / WEB SHARE
    ================================================================ */
 function shareResult() {
   if (!lastResult) return;
   const { sc, pursuit, nyst, delay, verdict } = lastResult;
-
+ 
   const emoji = sc < 20 ? '✅' : sc < 40 ? '🟡' : sc < 60 ? '🟠' : '🔴';
   const grade = sc < 20 ? '정상' : sc < 40 ? '경미' : sc < 60 ? '중등' : sc < 80 ? '심함' : '매우심함';
-
+ 
   const text =
     `👁️ 눈동자 음주 판별 테스트 결과\n\n` +
     `${emoji} 취한 정도: ${sc}/100 (${grade})\n` +
@@ -891,7 +891,7 @@ function shareResult() {
     `├ 안구진탕:    ${nyst.toFixed(1)}%\n` +
     `└ 반응 딜레이: ${delay} ms\n\n` +
     `나도 테스트 해보기 👉 https://allex1114.github.io`;
-
+ 
   if (navigator.share) {
     navigator.share({
       title: '👁️ 눈동자 음주 판별 테스트',
@@ -902,7 +902,7 @@ function shareResult() {
     fallbackCopy(text);
   }
 }
-
+ 
 function fallbackCopy(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text)
@@ -912,19 +912,19 @@ function fallbackCopy(text) {
     showToast('공유 텍스트:\n\n' + text);
   }
 }
-
+ 
 function showToast(msg) {
   // Simple alert fallback — could be replaced with a toast UI
   alert(msg);
 }
-
+ 
 function setMetric(id, val, pct, color) {
   document.getElementById(id).textContent = val;
   const bar = document.getElementById(id + '-bar');
   bar.style.background = color;
   setTimeout(() => { bar.style.width = pct + '%'; }, 100);
 }
-
+ 
 /* ================================================================
    TRACKING CHART
    ================================================================ */
@@ -934,12 +934,12 @@ function drawChart(data) {
   const ctx = cvs.getContext('2d');
   const W = cvs.width, H = cvs.height;
   ctx.clearRect(0, 0, W, H);
-
+ 
   const t0   = data[0].t, tN = data[data.length-1].t;
   const tSpan = tN - t0 || 1;
-
+ 
   const yOf = (v) => H * 0.5 - v * H * 0.38; // centered
-
+ 
   // Stimulus path
   ctx.beginPath();
   data.forEach((s, i) => {
@@ -949,7 +949,7 @@ function drawChart(data) {
   });
   ctx.strokeStyle = 'rgba(124,107,255,.75)';
   ctx.lineWidth = 2; ctx.stroke();
-
+ 
   // Eye path
   ctx.beginPath();
   let first = true;
@@ -960,7 +960,7 @@ function drawChart(data) {
   });
   ctx.strokeStyle = 'rgba(0,212,170,.8)';
   ctx.lineWidth = 1.5; ctx.stroke();
-
+ 
   // Legend
   ctx.font = '11px Segoe UI';
   ctx.fillStyle = 'rgba(124,107,255,.9)';
@@ -968,7 +968,7 @@ function drawChart(data) {
   ctx.fillStyle = 'rgba(0,212,170,.9)';
   ctx.fillText('● 눈 경로', 90, 14);
 }
-
+ 
 /* ================================================================
    MATH UTILITIES
    ================================================================ */
@@ -998,7 +998,7 @@ function pearson(xs, ys) {
   const den = Math.sqrt(dx2 * dy2);
   return den === 0 ? 0 : num / den;
 }
-
+ 
 /* ================================================================
    RESET
    ================================================================ */
@@ -1013,7 +1013,7 @@ function resetApp() {
   setPhase('setup');
   updateStatus('다시 얼굴을 맞춰주세요.', 'wait');
 }
-
+ 
 /* ================================================================
    WINDOW RESIZE
    ================================================================ */
@@ -1023,7 +1023,7 @@ window.addEventListener('resize', () => {
     testCvs.height = window.innerHeight;
   }
 });
-
+ 
 /* ================================================================
    INIT  — wait for MediaPipe scripts to load
    ================================================================ */
