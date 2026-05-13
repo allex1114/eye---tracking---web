@@ -319,7 +319,6 @@ function removeIQR(s){
 /* CONSENT */
 function setConsent(agreed){
   userConsented=agreed;
-  localStorage.setItem('hgn_consent',agreed?'yes':'no');
   if(agreed)initFirebase();
   setPhase('intro');
 }
@@ -664,11 +663,14 @@ function fallbackCopy(text){
 /* RESET */
 function resetApp(){
   cancelAnimationFrame(rafId);testActive=false;samples=[];calibBuf=[];orientSign=0;faceOK=false;
+  userConsented=false; // 매번 동의 초기화
   const n=document.getElementById('feedback-nudge');if(n)n.style.display='none';
-  [0,1,2,3].forEach(i=>{const b=document.getElementById('db'+i);if(b)b.disabled=false;});
   document.getElementById('fb-status').textContent='';
   document.getElementById('start-test-btn').disabled=true;
-  setPhase('setup');updateStatus('다시 얼굴을 맞춰주세요.','wait');
+  // fbState 초기화
+  fbState.type=null;fbState.soju=0;fbState.beer=0;fbState.mins=null;
+  fbShowStep(1);
+  setPhase('consent'); // 매번 동의 화면부터
 }
 
 /* MATH */
@@ -690,9 +692,8 @@ window.addEventListener('load',()=>{
     if(typeof FaceMesh!=='undefined'&&typeof Camera!=='undefined'){
       clearInterval(check);
       document.getElementById('loading').style.display='none';
-      const saved=localStorage.getItem('hgn_consent');
-      if(saved===null){setPhase('consent');}
-      else{userConsented=(saved==='yes');if(userConsented)initFirebase();setPhase('intro');}
+      // 매번 동의 화면 표시 (다른 사람도 같은 폰으로 사용할 수 있으므로)
+      setPhase('consent');
     }
   },200);
   setTimeout(()=>{clearInterval(check);document.getElementById('loading').innerHTML='<p style="color:#ff4757;max-width:380px;text-align:center;line-height:1.6;">⚠️ MediaPipe 로드 실패<br><small>인터넷 연결을 확인하고 새로고침하세요.</small></p>';},15000);
