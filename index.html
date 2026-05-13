@@ -413,7 +413,15 @@ function skipFeedback(){resetApp();}
 
 /* SETUP */
 async function startSetup(){
-  setPhase('setup'); updateStatus('MediaPipe 초기화 중...','wait');
+  setPhase('setup');
+  // 이미 카메라가 초기화된 경우 재사용 (다시 테스트 시 충돌 방지)
+  if(mpCam){
+    faceOK=false;
+    document.getElementById('start-test-btn').disabled=true;
+    updateStatus('카메라 연결됨. 얼굴을 화면에 맞춰주세요.','wait');
+    return;
+  }
+  updateStatus('MediaPipe 초기화 중...','wait');
   try{
     faceMesh=new FaceMesh({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/'+f});
     faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
