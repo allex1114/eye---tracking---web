@@ -83,6 +83,29 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
 .drink-btn:hover { border-color:var(--accent); background:rgba(124,107,255,.1); transform:translateY(-2px); }
 .drink-btn:active { transform:none; }
 .drink-btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+.fb-progress { display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:20px; }
+.fb-dot { width:28px; height:28px; border-radius:50%; border:2px solid var(--border); color:var(--dim); font-size:.75rem; font-weight:700; display:flex; align-items:center; justify-content:center; transition:all .3s; }
+.fb-dot.active { border-color:var(--accent); background:var(--accent); color:#fff; }
+.fb-dot.done { border-color:var(--success); background:var(--success); color:#fff; }
+.fb-line { width:24px; height:2px; background:var(--border); border-radius:1px; }
+.fb-step { display:none; }
+.fb-step.show { display:block; }
+.fb-step h3 { font-size:1rem; margin-bottom:14px; color:var(--text); }
+.type-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:4px; }
+.type-btn { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 10px; cursor:pointer; color:var(--text); font-size:1.2rem; transition:all .2s; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.type-btn span { font-size:.78rem; color:var(--dim); font-weight:600; }
+.type-btn:hover,.type-btn.sel { border-color:var(--accent); background:rgba(124,107,255,.12); }
+.type-btn:active { transform:scale(.97); }
+.amt-section { margin-bottom:14px; text-align:left; }
+.amt-label { font-size:.78rem; color:var(--dim); margin-bottom:7px; }
+.amt-row { display:flex; gap:7px; flex-wrap:wrap; }
+.amt-btn { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 14px; cursor:pointer; color:var(--dim); font-size:.9rem; font-weight:600; transition:all .2s; }
+.amt-btn:hover,.amt-btn.sel { border-color:var(--accent); color:var(--accent); background:rgba(124,107,255,.1); }
+.time-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.time-btn { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 4px; cursor:pointer; color:var(--dim); font-size:.75rem; font-weight:600; transition:all .2s; line-height:1.4; }
+.time-btn:hover,.time-btn.sel { border-color:var(--accent); color:var(--accent); background:rgba(124,107,255,.1); }
+.fb-next { margin-top:14px; width:100%; padding:11px; border-radius:50px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; color:#fff; font-size:.95rem; font-weight:700; cursor:pointer; transition:all .2s; }
+.fb-next:disabled { opacity:.3; cursor:not-allowed; }
 #loading { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
 .spinner { width:44px; height:44px; border-radius:50%; border:3px solid var(--border); border-top-color:var(--accent); animation:spin .8s linear infinite; }
 @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
@@ -177,17 +200,54 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
 
 <div id="phase-feedback" class="phase">
   <div class="feedback-card">
-    <div style="font-size:2.4rem;margin-bottom:14px">🙏</div>
-    <h2 style="font-size:1.4rem;margin-bottom:8px;">실제 음주량 입력</h2>
-    <p style="color:var(--dim);font-size:.88rem;line-height:1.6;margin-bottom:22px;">실제 음주량을 알려주시면 AI 모델 개선에 도움이 됩니다.<br><span style="font-size:.78rem;">데이터는 익명으로 처리됩니다.</span></p>
-    <div class="drink-grid">
-      <button class="drink-btn" id="db0" onclick="submitFeedback(0)">🚫<br><span>안 마심</span></button>
-      <button class="drink-btn" id="db1" onclick="submitFeedback(1)">🍺<br><span>1~2잔</span></button>
-      <button class="drink-btn" id="db2" onclick="submitFeedback(2)">🍻<br><span>3~4잔</span></button>
-      <button class="drink-btn" id="db3" onclick="submitFeedback(3)">🥃<br><span>5잔+</span></button>
+    <div style="font-size:2rem;margin-bottom:10px">🙏</div>
+    <h2 style="font-size:1.3rem;margin-bottom:6px;">실제 음주 정보 입력</h2>
+    <p style="color:var(--dim);font-size:.82rem;line-height:1.5;margin-bottom:16px;">AI 모델 개선에 도움이 됩니다. 익명 처리됩니다.</p>
+    <!-- 진행 표시 -->
+    <div class="fb-progress">
+      <div class="fb-dot active" id="fbdot1">1</div>
+      <div class="fb-line"></div>
+      <div class="fb-dot" id="fbdot2">2</div>
+      <div class="fb-line"></div>
+      <div class="fb-dot" id="fbdot3">3</div>
     </div>
-    <button class="btn-ghost" style="margin-top:16px;" onclick="skipFeedback()">건너뛰기</button>
-    <p id="fb-status" style="color:var(--success);font-size:.82rem;margin-top:12px;min-height:18px;"></p>
+    <!-- STEP 1: 주종 -->
+    <div class="fb-step show" id="fb-s1">
+      <h3>무엇을 마셨나요?</h3>
+      <div class="type-grid">
+        <button class="type-btn" onclick="fbType('none')">🚫<br><span>안 마심</span></button>
+        <button class="type-btn" onclick="fbType('soju')">🍶<br><span>소주</span></button>
+        <button class="type-btn" onclick="fbType('beer')">🍺<br><span>맥주</span></button>
+        <button class="type-btn" onclick="fbType('both')">🥂<br><span>소주+맥주</span></button>
+      </div>
+    </div>
+    <!-- STEP 2: 음주량 -->
+    <div class="fb-step" id="fb-s2">
+      <h3>얼마나 마셨나요?</h3>
+      <div id="fb-amt-soju" class="amt-section" style="display:none">
+        <div class="amt-label">🍶 소주 (소주잔 기준)</div>
+        <div class="amt-row" id="soju-btns"></div>
+      </div>
+      <div id="fb-amt-beer" class="amt-section" style="display:none">
+        <div class="amt-label">🍺 맥주 (맥주잔 기준, 500ml)</div>
+        <div class="amt-row" id="beer-btns"></div>
+      </div>
+      <button class="fb-next" id="fb-next2" onclick="fbNext2()" disabled>다음 →</button>
+    </div>
+    <!-- STEP 3: 경과 시간 -->
+    <div class="fb-step" id="fb-s3">
+      <h3>마신지 얼마나 됐나요?</h3>
+      <div class="time-grid">
+        <button class="time-btn" onclick="fbTime(7,this)">15분<br>미만</button>
+        <button class="time-btn" onclick="fbTime(22,this)">15~<br>30분</button>
+        <button class="time-btn" onclick="fbTime(45,this)">30~<br>60분</button>
+        <button class="time-btn" onclick="fbTime(90,this)">1~2<br>시간</button>
+        <button class="time-btn" onclick="fbTime(150,this)">2시간<br>이상</button>
+      </div>
+      <button class="fb-next" id="fb-next3" onclick="fbSubmit()" disabled>제출하기 ✓</button>
+    </div>
+    <button class="btn-ghost" style="margin-top:14px;font-size:.85rem;padding:8px 20px;" onclick="skipFeedback()">건너뛰기</button>
+    <p id="fb-status" style="color:var(--success);font-size:.82rem;margin-top:10px;min-height:18px;"></p>
   </div>
 </div>
 
@@ -264,11 +324,69 @@ function setConsent(agreed){
   setPhase('intro');
 }
 
-/* FEEDBACK */
-async function submitFeedback(level){
+/* FEEDBACK — 다단계 (주종/음주량/경과시간) */
+const fbState={type:null,soju:0,beer:0,mins:null};
+
+function fbShowStep(n){
+  [1,2,3].forEach(i=>{
+    document.getElementById('fb-s'+i).classList.toggle('show',i===n);
+    const d=document.getElementById('fbdot'+i);
+    d.classList.toggle('active',i===n);
+    d.classList.toggle('done',i<n);
+  });
+}
+
+function fbType(type){
+  fbState.type=type; fbState.soju=0; fbState.beer=0;
+  if(type==='none'){fbSubmit();return;}
+  // 음주량 화면 구성
+  const ss=document.getElementById('fb-amt-soju'),sb=document.getElementById('fb-amt-beer');
+  ss.style.display=(type==='soju'||type==='both')?'block':'none';
+  sb.style.display=(type==='beer'||type==='both')?'block':'none';
+  // 소주 버튼 생성
+  const sRow=document.getElementById('soju-btns'); sRow.innerHTML='';
+  ['1잔','2잔','3잔','4잔','5잔','6잔+'].forEach((lbl,i)=>{
+    const b=document.createElement('button'); b.className='amt-btn';
+    b.textContent=lbl; b.onclick=()=>fbAmt('soju',i+1,b); sRow.appendChild(b);
+  });
+  // 맥주 버튼 생성
+  const bRow=document.getElementById('beer-btns'); bRow.innerHTML='';
+  ['1잔','2잔','3잔','4잔+'].forEach((lbl,i)=>{
+    const b=document.createElement('button'); b.className='amt-btn';
+    b.textContent=lbl; b.onclick=()=>fbAmt('beer',i+1,b); bRow.appendChild(b);
+  });
+  document.getElementById('fb-next2').disabled=true;
+  fbShowStep(2);
+}
+
+function fbAmt(kind,val,btn){
+  fbState[kind==='soju'?'soju':'beer']=val;
+  // 해당 행의 선택 표시
+  const row=document.getElementById(kind+'-btns');
+  row.querySelectorAll('.amt-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  // 둘 다인 경우 두 가지 모두 선택해야 다음 활성화
+  const ok = fbState.type==='both'?(fbState.soju>0&&fbState.beer>0):(fbState.soju>0||fbState.beer>0);
+  document.getElementById('fb-next2').disabled=!ok;
+}
+
+function fbNext2(){fbShowStep(3);}
+
+function fbTime(mins,btn){
+  fbState.mins=mins;
+  document.querySelectorAll('.time-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  document.getElementById('fb-next3').disabled=false;
+}
+
+async function fbSubmit(){
   if(!db||!lastResult){skipFeedback();return;}
-  [0,1,2,3].forEach(i=>{const b=document.getElementById('db'+i);if(b)b.disabled=true;});
   document.getElementById('fb-status').textContent='전송 중...';
+  document.querySelectorAll('.type-btn,.amt-btn,.time-btn,.fb-next').forEach(b=>b.disabled=true);
+  // 순알코올 계산 (소주잔:6.7g, 맥주잔:17.8g)
+  const totalGrams=fbState.soju*6.7+fbState.beer*17.8;
+  // selfReported: 0=절주, 1=경미(~20g), 2=보통(~40g), 3=많이(40g+)
+  const selfReported=totalGrams<1?0:totalGrams<20?1:totalGrams<40?2:3;
   try{
     await db.collection('hgn_records').add({
       timestamp:firebase.firestore.FieldValue.serverTimestamp(),
@@ -277,7 +395,13 @@ async function submitFeedback(level){
       delay:lastResult.delay,
       deviation:Math.round(lastResult.deviation*10)/10,
       impairment:lastResult.sc,
-      selfReported:level,version:'1.3'
+      selfReported,
+      drinkType:['none','soju','beer','both'].indexOf(fbState.type),
+      sojuGlasses:fbState.soju,
+      beerGlasses:fbState.beer,
+      totalGrams:Math.round(totalGrams*10)/10,
+      minutesSince:fbState.mins||0,
+      version:'1.4'
     });
     document.getElementById('fb-status').textContent='✅ 감사합니다! 모델 개선에 기여하셨습니다.';
     setTimeout(()=>resetApp(),1800);
