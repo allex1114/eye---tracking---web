@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>👁️ HGN 눈동자 음주 판별 테스트</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #06061a;
+  --surface: #0d0d2e;
+  --border: rgba(80,80,160,0.35);
+  --accent: #7c6bff;
+  --accent2: #ff6b9d;
+  --success: #00d4aa;
+  --warn: #ffd166;
+  --danger: #ff4757;
+  --text: #e0e0ff;
+  --dim: #7070a0;
+}
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+/* ── PHASES ── */
+.phase { display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; }
+.phase.active { display:flex; }
+
+/* ── INTRO ── */
+.intro-card {
+  max-width:560px; width:90%;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:36px 40px;
+  text-align:center;
+  animation: fadeUp .5s ease;
+}
+.eye-icon { font-size:3rem; margin-bottom:12px; }
+h1 {
+  font-size:1.9rem; font-weight:800; margin-bottom:6px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}
+.subtitle { color:var(--dim); font-size:.9rem; line-height:1.6; margin-bottom:20px; }
+.disclaimer {
+  background:rgba(255,209,102,.08); border:1px solid rgba(255,209,102,.3);
+  border-radius:10px; padding:12px 16px; font-size:.82rem; color:var(--warn);
+  margin-bottom:20px; line-height:1.6; text-align:left;
+}
+.how-list { text-align:left; margin-bottom:24px; }
+.how-list li {
+  list-style:none; padding:5px 0; color:var(--dim); font-size:.88rem;
+}
+.how-list li::before { content:"→ "; color:var(--accent); }
+.btn {
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border:none; color:#fff; padding:13px 38px;
+  border-radius:50px; font-size:1.05rem; font-weight:700;
+  cursor:pointer; transition:all .2s; letter-spacing:.4px;
+}
+.btn:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(124,107,255,.45); }
+.btn:active { transform:none; }
+.btn:disabled { opacity:.4; cursor:not-allowed; transform:none; box-shadow:none; }
+.btn-ghost {
+  background:var(--surface); border:1px solid var(--accent);
+  color:var(--accent); padding:11px 30px;
+  border-radius:50px; font-size:.95rem; font-weight:600;
+  cursor:pointer; transition:all .2s;
+}
+.btn-ghost:hover { background:rgba(124,107,255,.1); }
+
+/* ── SETUP ── */
+#phase-setup { gap:16px; padding:20px; }
+.setup-title { text-align:center; }
+.setup-title h2 { font-size:1.4rem; margin-bottom:4px; }
+.setup-title p { color:var(--dim); font-size:.88rem; }
+.cam-wrap {
+  position:relative; border-radius:16px; overflow:hidden;
+  border:2px solid var(--border); background:#000;
+  width:min(640px,95vw); aspect-ratio:4/3;
+}
+#setup-canvas { width:100%; height:100%; display:block; transform:scaleX(-1); }
+.cam-status {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:13px 22px;
+  display:flex; align-items:center; gap:10px;
+  min-width:280px; justify-content:center;
+}
+.dot {
+  width:10px; height:10px; border-radius:50%;
+  background:var(--dim); flex-shrink:0; transition:all .3s;
+}
+.dot.ok { background:var(--success); box-shadow:0 0 8px var(--success); }
+.dot.err { background:var(--danger); box-shadow:0 0 8px var(--danger); }
+#status-text { font-size:.9rem; }
+
+/* ── TEST ── */
+#phase-test { padding:0; overflow:hidden; }
+#test-canvas { position:absolute; inset:0; width:100%; height:100%; }
+.face-pip {
+  position:fixed; top:16px; right:16px; z-index:10;
+  width:180px; border-radius:12px; overflow:hidden;
+  border:2px solid var(--border); background:#000;
+}
+#face-canvas { width:100%; display:block; transform:scaleX(-1); }
+.pip-label {
+  position:absolute; bottom:4px; left:0; right:0; text-align:center;
+  font-size:.65rem; color:rgba(255,255,255,.5); letter-spacing:.5px;
+}
+.progress-track { position:fixed; top:0; left:0; right:0; height:3px; background:var(--surface); z-index:10; }
+#prog-bar { height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .1s linear; }
+.hud {
+  position:fixed; bottom:0; left:0; right:0; z-index:10;
+  background:rgba(6,6,26,.85); backdrop-filter:blur(12px);
+  border-top:1px solid var(--border);
+  padding:10px 20px;
+  display:flex; gap:28px; align-items:center; justify-content:center;
+}
+.hud-item { text-align:center; }
+.hud-label { font-size:.65rem; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px; }
+.hud-val { font-size:1.1rem; font-weight:700; font-family:'Courier New',monospace; color:var(--accent); }
+
+/* ── RESULTS ── */
+#phase-results { overflow-y:auto; padding:24px 16px; align-items:flex-start; }
+.results-inner {
+  max-width:680px; width:100%; margin:0 auto;
+  animation:fadeUp .5s ease;
+}
+.res-header { text-align:center; margin-bottom:28px; }
+.score-ring {
+  width:150px; height:150px; border-radius:50%;
+  border:5px solid var(--accent);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  margin:0 auto 24px;
+  background:radial-gradient(circle,rgba(124,107,255,.12),transparent);
+}
+.score-num { font-size:2.8rem; font-weight:900; color:var(--accent); line-height:1; }
+.score-unit { font-size:.72rem; color:var(--dim); letter-spacing:1.5px; margin-top:3px; }
+.verdict {
+  padding:14px 20px; border-radius:12px;
+  border:1px solid var(--success); background:rgba(0,212,170,.08);
+  color:var(--success); font-weight:600; font-size:1rem;
+  text-align:center; margin-bottom:24px; line-height:1.5;
+}
+.metric-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
+.m-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:14px;
+}
+.m-card-label { font-size:.72rem; color:var(--dim); margin-bottom:4px; }
+.m-card-val { font-size:1.5rem; font-weight:700; font-family:'Courier New',monospace; margin-bottom:6px; }
+.m-bar { height:4px; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden; }
+.m-bar-fill { height:100%; border-radius:2px; transition:width 1s ease; }
+.chart-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:16px; margin-bottom:20px;
+}
+.chart-title { font-size:.78rem; color:var(--dim); margin-bottom:8px; letter-spacing:.5px; }
+#res-chart { width:100%; display:block; }
+.res-footer { text-align:center; }
+.small-note { color:var(--dim); font-size:.74rem; margin-top:14px; line-height:1.5; }
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes blink {
+  0%,100% { opacity:1; } 50% { opacity:.3; }
+}
+.blink { animation:blink 1.2s ease infinite; }
+
+/* ── LOADING OVERLAY ── */
+#loading {
+  position:fixed; inset:0; z-index:100;
+  background:var(--bg); display:flex;
+  flex-direction:column; align-items:center; justify-content:center;
+  gap:14px;
+}
+.spinner {
+  width:44px; height:44px; border-radius:50%;
+  border:3px solid var(--border);
+  border-top-color:var(--accent);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="color:var(--dim);font-size:.9rem;">MediaPipe 로딩 중...</p>
+</div>
+
+<!-- INTRO -->
+<div id="phase-intro" class="phase">
+  <div class="intro-card">
+    <div class="eye-icon">👁️</div>
+    <h1>눈동자 음주 판별</h1>
+    <p class="subtitle">HGN(Horizontal Gaze Nystagmus) 검사 원리를 이용한<br>웹캠 기반 실시간 안구 추적 분석 시스템</p>
+    <div class="disclaimer">
+      ⚠️ <strong>교육·연구 목적 전용</strong><br>
+      이 앱은 의학적·법적 음주 판단 근거로 사용할 수 없습니다. 실제 음주 여부는 공인 음주측정기로만 확인하십시오.
+    </div>
+    <ul class="how-list">
+      <li>충분한 조명 아래 카메라 정면 50~70cm 거리 유지</li>
+      <li>테스트 중 <strong>머리는 고정</strong>, 눈만 움직여 점을 따라가세요</li>
+      <li>안경·콘택트 착용 가능, 단 반사광 주의</li>
+      <li>약 35초간 진행됩니다</li>
+    </ul>
+    <button class="btn" onclick="startSetup()">카메라 시작하기 →</button>
+  </div>
+</div>
+
+<!-- SETUP -->
+<div id="phase-setup" class="phase">
+  <div class="setup-title">
+    <h2>얼굴 인식 보정</h2>
+    <p>카메라를 정면으로 바라봐 주세요</p>
+  </div>
+  <div class="cam-wrap">
+    <canvas id="setup-canvas" width="640" height="480"></canvas>
+  </div>
+  <div class="cam-status">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">카메라 초기화 중...</span>
+  </div>
+  <button class="btn" id="start-test-btn" onclick="startTest()" disabled>테스트 시작 →</button>
+</div>
+
+<!-- TEST -->
+<div id="phase-test" class="phase">
+  <div class="progress-track"><div id="prog-bar"></div></div>
+  <canvas id="test-canvas"></canvas>
+  <div class="face-pip">
+    <canvas id="face-canvas" width="180" height="135"></canvas>
+    <div class="pip-label">EYE TRACKING</div>
+  </div>
+  <div class="hud">
+    <div class="hud-item">
+      <div class="hud-label">추적 정확도</div>
+      <div class="hud-val" id="h-acc">--%</div>
+    </div>
+    <div class="hud-item" style="width:1px;height:28px;background:var(--border)"></div>
+    <div class="hud-item">
+      <div class="hud-label">안구진탕</div>
+      <div class="hud-val" id="h-nyst">--%</div>
+    </div>
+    <div class="hud-item" style="width:1px;height:28px;background:var(--border)"></div>
+    <div class="hud-item">
+      <div class="hud-label">딜레이</div>
+      <div class="hud-val" id="h-delay">-- ms</div>
+    </div>
+    <div class="hud-item" style="width:1px;height:28px;background:var(--border)"></div>
+    <div class="hud-item">
+      <div class="hud-label">남은시간</div>
+      <div class="hud-val" id="h-time">35s</div>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="phase-results" class="phase">
+  <div class="results-inner">
+    <div class="res-header">
+      <h1 style="margin-bottom:6px;">검사 결과</h1>
+      <p style="color:var(--dim);font-size:.88rem;">HGN 기반 안구 추적 분석 · <span id="res-samples">0</span>개 샘플 수집</p>
+    </div>
+
+    <div class="score-ring" id="score-ring">
+      <div class="score-num" id="score-num">0</div>
+      <div class="score-unit">IMPAIRMENT</div>
+    </div>
+
+    <div class="verdict" id="verdict-box">판정 중...</div>
+
+    <div class="metric-grid">
+      <div class="m-card">
+        <div class="m-card-label">부드러운 추적 (Smooth Pursuit)</div>
+        <div class="m-card-val" id="r-pursuit" style="color:var(--success)">--%</div>
+        <div class="m-bar"><div class="m-bar-fill" id="r-pursuit-bar" style="background:var(--success);width:0%"></div></div>
+      </div>
+      <div class="m-card">
+        <div class="m-card-label">안구진탕 강도 (Nystagmus)</div>
+        <div class="m-card-val" id="r-nyst" style="color:var(--warn)">--</div>
+        <div class="m-bar"><div class="m-bar-fill" id="r-nyst-bar" style="background:var(--warn);width:0%"></div></div>
+      </div>
+      <div class="m-card">
+        <div class="m-card-label">추적 지연 (Response Delay)</div>
+        <div class="m-card-val" id="r-delay" style="color:var(--accent)">-- ms</div>
+        <div class="m-bar"><div class="m-bar-fill" id="r-delay-bar" style="background:var(--accent);width:0%"></div></div>
+      </div>
+      <div class="m-card">
+        <div class="m-card-label">경로 이탈 (Path Deviation)</div>
+        <div class="m-card-val" id="r-dev" style="color:var(--accent2)">--%</div>
+        <div class="m-bar"><div class="m-bar-fill" id="r-dev-bar" style="background:var(--accent2);width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">▎ 자극 경로 vs 눈 추적 경로</div>
+      <canvas id="res-chart" height="90"></canvas>
+    </div>
+
+    <div class="res-footer">
+      <button class="btn-ghost" onclick="resetApp()">↺ 다시 테스트</button>
+      <p class="small-note">⚠️ 이 결과는 교육 목적으로만 사용하세요.<br>실제 음주 판정은 공인 측정 기기로만 가능합니다.</p>
+    </div>
+  </div>
+</div>
+
+<!-- hidden video -->
+<video id="video" style="display:none" playsinline muted></video>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+<script>
+'use strict';
+/* ================================================================
+   CONFIG
+   ================================================================ */
+const CFG = {
+  TEST_DURATION_MS : 35000,   // total test length
+  CALIB_DURATION_S : 4,       // orientation-detection calibration phase
+  STIM_AMPLITUDE   : 0.37,    // fraction of canvas width from center
+  STIM_FREQ_HZ     : 0.22,    // oscillation frequency
+  DOT_R            : 18,
+  MIN_VALID        : 60,      // minimum valid samples to show results
+  NYST_WIN         : 45,      // samples window for nystagmus detection
+};
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let faceMesh    = null;
+let mpCam       = null;
+let phase       = 'loading';
+
+// Test
+let testActive  = false;
+let testStart   = 0;
+let rafId       = null;
+let samples     = [];   // { t, sx, ex, valid }
+let orientSign  = 0;    // +1 or -1 (mirroring correction)
+
+// Calibration data (first CFG.CALIB_DURATION_S s)
+let calibBuf    = [];   // { t, sx, ex }
+
+// MediaPipe output
+let lastLM      = null;
+let faceOK      = false;
+
+/* ================================================================
+   DOM
+   ================================================================ */
+const video      = document.getElementById('video');
+const setupCvs   = document.getElementById('setup-canvas');
+const sctx       = setupCvs.getContext('2d');
+const testCvs    = document.getElementById('test-canvas');
+const tctx       = testCvs.getContext('2d');
+const faceCvs    = document.getElementById('face-canvas');
+const fctx       = faceCvs.getContext('2d');
+
+/* ================================================================
+   PHASE MANAGEMENT
+   ================================================================ */
+function setPhase(name) {
+  document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+  document.getElementById('phase-' + name).classList.add('active');
+  phase = name;
+}
+
+/* ================================================================
+   SETUP PHASE
+   ================================================================ */
+async function startSetup() {
+  setPhase('setup');
+  updateStatus('MediaPipe 초기화 중...', 'wait');
+
+  try {
+    faceMesh = new FaceMesh({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+    });
+    faceMesh.setOptions({
+      maxNumFaces        : 1,
+      refineLandmarks    : true,   // enables iris landmarks (468–477)
+      minDetectionConfidence : 0.5,
+      minTrackingConfidence  : 0.5,
+    });
+    faceMesh.onResults(onResults);
+
+    mpCam = new Camera(video, {
+      onFrame: async () => { if (faceMesh) await faceMesh.send({ image: video }); },
+      width: 640, height: 480,
+    });
+    await mpCam.start();
+    updateStatus('카메라 연결됨. 얼굴을 화면에 맞춰주세요.', 'wait');
+  } catch (e) {
+    updateStatus('오류: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+function updateStatus(msg, state) {
+  document.getElementById('status-text').textContent = msg;
+  const d = document.getElementById('status-dot');
+  d.className = 'dot' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
+}
+
+/* ================================================================
+   MEDIAPIPE CALLBACK
+   ================================================================ */
+function onResults(res) {
+  if (phase === 'setup') drawSetup(res);
+  if (phase === 'test')  { drawPip(res); if (testActive) collectSample(res); }
+
+  const hasFace = res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0;
+  if (hasFace) {
+    lastLM = res.multiFaceLandmarks[0];
+    if (!faceOK) {
+      faceOK = true;
+      updateStatus('✓ 얼굴 감지 완료!  테스트를 시작하세요.', 'ok');
+      document.getElementById('start-test-btn').disabled = false;
+    }
+  } else {
+    lastLM = null;
+    if (phase === 'setup') {
+      faceOK = false;
+      updateStatus('얼굴을 찾을 수 없습니다. 정면을 바라봐 주세요.', 'wait');
+      document.getElementById('start-test-btn').disabled = true;
+    }
+  }
+}
+
+/* ================================================================
+   SETUP CANVAS DRAWING
+   ================================================================ */
+function drawSetup(res) {
+  const w = setupCvs.width, h = setupCvs.height;
+  sctx.clearRect(0, 0, w, h);
+  sctx.drawImage(video, 0, 0, w, h);
+
+  if (!res.multiFaceLandmarks || !res.multiFaceLandmarks.length) {
+    // guide box
+    sctx.save();
+    sctx.strokeStyle = 'rgba(255,100,100,.5)';
+    sctx.lineWidth = 2;
+    sctx.setLineDash([8, 4]);
+    sctx.strokeRect(w*.22, h*.1, w*.56, h*.8);
+    sctx.setLineDash([]);
+    sctx.fillStyle = 'rgba(255,100,100,.8)';
+    sctx.font = '14px Segoe UI';
+    sctx.textAlign = 'center';
+    sctx.fillText('얼굴을 이 영역에 맞춰주세요', w/2, h/2);
+    sctx.restore();
+    return;
+  }
+  const lm = res.multiFaceLandmarks[0];
+  drawEyeOutline(sctx, lm, w, h);
+  if (lm.length > 477) {
+    drawIrisDot(sctx, lm[468], w, h, '#00d4aa', 7);  // left iris
+    drawIrisDot(sctx, lm[473], w, h, '#7c6bff', 7);  // right iris
+  }
+}
+
+/* ================================================================
+   PIP (face-cam during test)
+   ================================================================ */
+function drawPip(res) {
+  const w = faceCvs.width, h = faceCvs.height;
+  fctx.clearRect(0, 0, w, h);
+  fctx.drawImage(video, 0, 0, w, h);
+  if (res.multiFaceLandmarks && res.multiFaceLandmarks.length) {
+    const lm = res.multiFaceLandmarks[0];
+    drawEyeOutline(fctx, lm, w, h);
+    if (lm.length > 477) {
+      drawIrisDot(fctx, lm[468], w, h, '#00d4aa', 4);
+      drawIrisDot(fctx, lm[473], w, h, '#7c6bff', 4);
+    }
+  }
+}
+
+function drawEyeOutline(ctx, lm, w, h) {
+  // Left eye contour
+  const LE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+  const RE = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
+  [[LE,'rgba(0,212,170,.6)'],[RE,'rgba(124,107,255,.6)']].forEach(([idx,col]) => {
+    ctx.beginPath();
+    idx.forEach((i,n) => {
+      const p = lm[i];
+      n===0 ? ctx.moveTo(p.x*w, p.y*h) : ctx.lineTo(p.x*w, p.y*h);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+}
+
+function drawIrisDot(ctx, lm, w, h, color, r) {
+  ctx.beginPath();
+  ctx.arc(lm.x*w, lm.y*h, r, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+}
+
+/* ================================================================
+   TEST START
+   ================================================================ */
+function startTest() {
+  setPhase('test');
+  testCvs.width  = window.innerWidth;
+  testCvs.height = window.innerHeight;
+  samples   = [];
+  calibBuf  = [];
+  orientSign = 0;
+  testActive = true;
+  testStart  = performance.now();
+  rafId = requestAnimationFrame(testLoop);
+}
+
+/* ================================================================
+   STIMULUS POSITION  (0–1 fraction of canvas width)
+   ================================================================ */
+function stimPos(t) {
+  if (t < CFG.CALIB_DURATION_S) {
+    // Calibration: slow rightward ramp 0.5 → 0.5 + amplitude
+    return 0.5 + CFG.STIM_AMPLITUDE * (t / CFG.CALIB_DURATION_S);
+  }
+  return 0.5 + CFG.STIM_AMPLITUDE *
+    Math.sin(2 * Math.PI * CFG.STIM_FREQ_HZ * (t - CFG.CALIB_DURATION_S));
+}
+
+/* ================================================================
+   SAMPLE COLLECTION
+   ================================================================ */
+function collectSample(res) {
+  const t  = (performance.now() - testStart) / 1000;
+  const sx = stimPos(t);
+  let ex = null;
+
+  if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
+    const lm = res.multiFaceLandmarks[0];
+    if (lm.length > 477) {
+      // Iris x normalised against eye width
+      const li = lm[468]; // left iris
+      const ri = lm[473]; // right iris
+      // Eye span landmarks
+      const lL = lm[33]; const lR = lm[133];
+      const rL = lm[362]; const rR = lm[263];
+      const lw = Math.abs(lR.x - lL.x) || .05;
+      const rw = Math.abs(rR.x - rL.x) || .05;
+      const lnx = (li.x - (lL.x + lR.x)/2) / lw;
+      const rnx = (ri.x - (rL.x + rR.x)/2) / rw;
+      ex = (lnx + rnx) / 2;  // -∞..+∞ ; sober range ≈ ±0.5
+
+      // Calibration phase: detect orientation sign
+      if (t < CFG.CALIB_DURATION_S) {
+        calibBuf.push({ t, sx, ex });
+        if (calibBuf.length >= 20 && orientSign === 0) {
+          // Does ex increase when sx increases?
+          const n = calibBuf.length;
+          const dsx = calibBuf[n-1].sx - calibBuf[0].sx;
+          const dex = calibBuf[n-1].ex - calibBuf[0].ex;
+          if (Math.abs(dex) > 0.01) {
+            orientSign = Math.sign(dsx * dex); // +1 same dir, -1 mirrored
+          }
+        }
+      }
+    }
+  }
+
+  samples.push({ t, sx, ex, valid: ex !== null });
+}
+
+/* ================================================================
+   TEST ANIMATION LOOP
+   ================================================================ */
+function testLoop(now) {
+  const elapsed = now - testStart;
+  const t = elapsed / 1000;
+
+  if (elapsed >= CFG.TEST_DURATION_MS) {
+    testActive = false;
+    finishTest();
+    return;
+  }
+
+  // Progress
+  document.getElementById('prog-bar').style.width = (elapsed / CFG.TEST_DURATION_MS * 100) + '%';
+  document.getElementById('h-time').textContent = Math.ceil((CFG.TEST_DURATION_MS - elapsed) / 1000) + 's';
+
+  drawTestFrame(t);
+  updateHUD();
+  rafId = requestAnimationFrame(testLoop);
+}
+
+/* ================================================================
+   TEST CANVAS DRAWING
+   ================================================================ */
+function drawTestFrame(t) {
+  const W = testCvs.width, H = testCvs.height;
+  const ctx = tctx;
+
+  // Background
+  ctx.fillStyle = '#06061a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Horizon line
+  ctx.strokeStyle = 'rgba(255,255,255,.04)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+
+  // Range markers
+  const lx = W * (0.5 - CFG.STIM_AMPLITUDE);
+  const rx = W * (0.5 + CFG.STIM_AMPLITUDE);
+  ctx.strokeStyle = 'rgba(255,255,255,.09)';
+  ctx.setLineDash([4,4]);
+  [[lx],[rx]].forEach(([x]) => {
+    ctx.beginPath(); ctx.moveTo(x, H/2-28); ctx.lineTo(x, H/2+28); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // Eye trail
+  if (orientSign !== 0 && samples.length > 3) {
+    const rec = samples.slice(-80).filter(s => s.valid);
+    if (rec.length > 3) {
+      ctx.beginPath();
+      rec.forEach((s, i) => {
+        // Map normalized iris x back to screen x
+        const ex = W * (0.5 + s.ex * orientSign * CFG.STIM_AMPLITUDE * 1.8);
+        i === 0 ? ctx.moveTo(ex, H/2+55) : ctx.lineTo(ex, H/2+55);
+      });
+      ctx.strokeStyle = 'rgba(0,212,170,.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // Stimulus dot
+  const sx = W * stimPos(t);
+  const sy = H / 2;
+  const R  = CFG.DOT_R;
+
+  // Glow
+  const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, R*3.5);
+  grd.addColorStop(0, 'rgba(124,107,255,.45)');
+  grd.addColorStop(1, 'rgba(124,107,255,0)');
+  ctx.beginPath(); ctx.arc(sx, sy, R*3.5, 0, Math.PI*2);
+  ctx.fillStyle = grd; ctx.fill();
+
+  // Dot body
+  ctx.beginPath(); ctx.arc(sx, sy, R, 0, Math.PI*2);
+  ctx.fillStyle = '#7c6bff'; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI*2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+
+  // Phase labels
+  ctx.textAlign = 'center';
+  if (t < CFG.CALIB_DURATION_S) {
+    const a = Math.min(1, CFG.CALIB_DURATION_S - t);
+    ctx.fillStyle = `rgba(124,107,255,${a*.7})`;
+    ctx.font = '13px Segoe UI';
+    ctx.fillText('방향 보정 중...', W/2, H/2 - 55);
+  } else if (t < CFG.CALIB_DURATION_S + 2) {
+    const a = Math.min(1, (CFG.CALIB_DURATION_S + 2 - t));
+    ctx.fillStyle = `rgba(224,224,255,${a})`;
+    ctx.font = 'bold 22px Segoe UI';
+    ctx.fillText('점을 눈으로만 따라가세요', W/2, H/2 - 70);
+    ctx.font = '15px Segoe UI';
+    ctx.fillStyle = `rgba(112,112,160,${a})`;
+    ctx.fillText('머리는 고정 · 눈만 움직이세요', W/2, H/2 - 44);
+  }
+}
+
+/* ================================================================
+   LIVE HUD UPDATE
+   ================================================================ */
+function updateHUD() {
+  if (orientSign === 0) return;
+  const valid = samples.filter(s => s.valid).slice(-80);
+  if (valid.length < 15) return;
+
+  const sx = valid.map(s => s.sx);
+  const ex = valid.map(s => s.ex * orientSign);
+
+  const corr = pearson(sx, ex);
+  const acc  = Math.max(0, Math.min(100, corr * 100));
+
+  const nyst = nystagmusScore(valid);
+  const delay = estimateDelay(sx, ex, valid);
+
+  document.getElementById('h-acc').textContent   = acc.toFixed(0) + '%';
+  document.getElementById('h-nyst').textContent  = nyst.toFixed(0) + '%';
+  document.getElementById('h-delay').textContent = delay + ' ms';
+}
+
+/* ================================================================
+   NYSTAGMUS SCORE  — variance of residual eye velocity
+   ================================================================ */
+function nystagmusScore(data) {
+  if (data.length < 10) return 0;
+  const vel = [];
+  for (let i = 1; i < data.length; i++) {
+    const dt = data[i].t - data[i-1].t;
+    if (dt > 0 && dt < .15) {
+      const dEye  = (data[i].ex  - data[i-1].ex)  / dt;
+      const dStim = (data[i].sx  - data[i-1].sx)  / dt;
+      vel.push(dEye * orientSign - dStim);
+    }
+  }
+  const rms = Math.sqrt(variance(vel));
+  return Math.min(100, rms * 260);
+}
+
+/* ================================================================
+   DELAY ESTIMATE — cross-correlation lag
+   ================================================================ */
+function estimateDelay(sx, ex, data) {
+  if (sx.length < 20) return 0;
+  const maxLag = Math.floor(sx.length * .25);
+  let best = -Infinity, bestLag = 0;
+  for (let lag = 0; lag <= maxLag; lag++) {
+    let s = 0, n = 0;
+    for (let i = lag; i < sx.length; i++) { s += sx[i-lag] * ex[i]; n++; }
+    const c = n > 0 ? s/n : -Infinity;
+    if (c > best) { best = c; bestLag = lag; }
+  }
+  const totalT = data[data.length-1].t - data[0].t;
+  const fps    = data.length / totalT;
+  return Math.round((bestLag / fps) * 1000);
+}
+
+/* ================================================================
+   FINISH TEST → ANALYSIS
+   ================================================================ */
+function finishTest() {
+  cancelAnimationFrame(rafId);
+  const valid = samples.filter(s => s.valid && s.t >= CFG.CALIB_DURATION_S);
+
+  if (valid.length < CFG.MIN_VALID || orientSign === 0) {
+    alert('데이터가 부족합니다 (유효 샘플: ' + valid.length + ').\n얼굴이 잘 인식되지 않았습니다. 다시 시도해주세요.');
+    resetApp();
+    return;
+  }
+
+  const sign = orientSign;
+  const sx   = valid.map(s => s.sx);
+  const ex   = valid.map(s => s.ex * sign);
+
+  // ① Smooth Pursuit — Pearson r
+  const corr   = pearson(sx, ex);
+  const pursuit = Math.max(0, Math.min(100, corr * 100));
+
+  // ② Nystagmus Intensity
+  const nyst = nystagmusScore(valid);
+
+  // ③ Delay (ms)
+  const delay = estimateDelay(sx, ex, valid);
+
+  // ④ Path Deviation
+  const devArr = valid.map((s, i) => Math.abs(s.ex * sign - sx[i]));
+  const devMean = mean(devArr);
+  const deviation = Math.min(100, devMean * 300);
+
+  // ⑤ Overall Impairment Score (0=sober, 100=impaired)
+  const impairment = Math.round(
+    (1 - pursuit / 100) * 35 +
+    nyst              * 0.35 +
+    Math.min(1, delay / 350) * 22 +
+    deviation         * 0.08
+  );
+
+  showResults({ pursuit, nyst, delay, deviation, impairment, samples: valid });
+}
+
+/* ================================================================
+   RESULTS
+   ================================================================ */
+function showResults(m) {
+  setPhase('results');
+  document.getElementById('res-samples').textContent = m.samples.length;
+
+  const sc = Math.min(100, Math.max(0, m.impairment));
+
+  // Color coding
+  let color, label, verdict, vbg;
+  if      (sc < 20) { color='#00d4aa'; label='정상';     verdict='✅ 음주 징후 없음 — 정상 범위의 안구 추적 능력입니다'; vbg='rgba(0,212,170,.08)'; }
+  else if (sc < 40) { color='#ffd166'; label='경미';     verdict='⚠️ 경미한 이상 — 일부 추적 불안정 요소가 감지됩니다'; vbg='rgba(255,209,102,.08)'; }
+  else if (sc < 60) { color='#ff9800'; label='중등';     verdict='⚠️ 중등도 이상 — 안구진탕 및 추적 지연이 관찰됩니다'; vbg='rgba(255,152,0,.08)'; }
+  else if (sc < 80) { color='#ff4757'; label='심함';     verdict='🔴 심한 이상 — 유의미한 안구진탕 및 추적 장애 관찰됨'; vbg='rgba(255,71,87,.08)'; }
+  else              { color='#dc2626'; label='매우심함'; verdict='🔴 매우 심한 이상 — 안구 추적 능력이 크게 저하됨'; vbg='rgba(220,38,38,.08)'; }
+
+  // Animate score ring
+  const ring = document.getElementById('score-ring');
+  ring.style.borderColor = color;
+  const numEl = document.getElementById('score-num');
+  numEl.style.color = color;
+  let cur = 0;
+  const iv = setInterval(() => {
+    cur = Math.min(sc, cur + 2);
+    numEl.textContent = cur;
+    if (cur >= sc) clearInterval(iv);
+  }, 18);
+
+  // Verdict
+  const vb = document.getElementById('verdict-box');
+  vb.textContent = verdict;
+  vb.style.borderColor = color;
+  vb.style.background  = vbg;
+  vb.style.color       = color;
+
+  // Metrics
+  setMetric('r-pursuit', m.pursuit.toFixed(1) + '%', m.pursuit, '#00d4aa');
+  setMetric('r-nyst',    m.nyst.toFixed(1)    + '%', m.nyst,    '#ffd166');
+  setMetric('r-delay',   m.delay              + ' ms', Math.min(100,m.delay/3.5), '#7c6bff');
+  setMetric('r-dev',     m.deviation.toFixed(1) + '%', m.deviation, '#ff6b9d');
+
+  // Chart
+  setTimeout(() => drawChart(m.samples), 200);
+}
+
+function setMetric(id, val, pct, color) {
+  document.getElementById(id).textContent = val;
+  const bar = document.getElementById(id + '-bar');
+  bar.style.background = color;
+  setTimeout(() => { bar.style.width = pct + '%'; }, 100);
+}
+
+/* ================================================================
+   TRACKING CHART
+   ================================================================ */
+function drawChart(data) {
+  const cvs = document.getElementById('res-chart');
+  cvs.width = cvs.parentElement.clientWidth - 32;
+  const ctx = cvs.getContext('2d');
+  const W = cvs.width, H = cvs.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const t0   = data[0].t, tN = data[data.length-1].t;
+  const tSpan = tN - t0 || 1;
+
+  const yOf = (v) => H * 0.5 - v * H * 0.38; // centered
+
+  // Stimulus path
+  ctx.beginPath();
+  data.forEach((s, i) => {
+    const x = (s.t - t0) / tSpan * W;
+    const y = yOf(s.sx - 0.5);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(124,107,255,.75)';
+  ctx.lineWidth = 2; ctx.stroke();
+
+  // Eye path
+  ctx.beginPath();
+  let first = true;
+  data.forEach(s => {
+    const x = (s.t - t0) / tSpan * W;
+    const y = yOf(s.ex * orientSign * CFG.STIM_AMPLITUDE * 1.8);
+    first ? (ctx.moveTo(x, y), first = false) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(0,212,170,.8)';
+  ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Legend
+  ctx.font = '11px Segoe UI';
+  ctx.fillStyle = 'rgba(124,107,255,.9)';
+  ctx.fillText('● 자극 경로', 8, 14);
+  ctx.fillStyle = 'rgba(0,212,170,.9)';
+  ctx.fillText('● 눈 경로', 90, 14);
+}
+
+/* ================================================================
+   MATH UTILITIES
+   ================================================================ */
+function mean(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+function variance(arr) {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length;
+}
+function pearson(xs, ys) {
+  if (xs.length !== ys.length || xs.length < 3) return 0;
+  const mx = mean(xs), my = mean(ys);
+  let num = 0, dx2 = 0, dy2 = 0;
+  for (let i = 0; i < xs.length; i++) {
+    const dx = xs[i] - mx, dy = ys[i] - my;
+    num += dx * dy; dx2 += dx*dx; dy2 += dy*dy;
+  }
+  const den = Math.sqrt(dx2 * dy2);
+  return den === 0 ? 0 : num / den;
+}
+
+/* ================================================================
+   RESET
+   ================================================================ */
+function resetApp() {
+  cancelAnimationFrame(rafId);
+  testActive = false;
+  samples    = [];
+  calibBuf   = [];
+  orientSign = 0;
+  faceOK     = false;
+  document.getElementById('start-test-btn').disabled = true;
+  setPhase('setup');
+  updateStatus('다시 얼굴을 맞춰주세요.', 'wait');
+}
+
+/* ================================================================
+   WINDOW RESIZE
+   ================================================================ */
+window.addEventListener('resize', () => {
+  if (phase === 'test') {
+    testCvs.width  = window.innerWidth;
+    testCvs.height = window.innerHeight;
+  }
+});
+
+/* ================================================================
+   INIT  — wait for MediaPipe scripts to load
+   ================================================================ */
+window.addEventListener('load', () => {
+  const check = setInterval(() => {
+    if (typeof FaceMesh !== 'undefined' && typeof Camera !== 'undefined') {
+      clearInterval(check);
+      document.getElementById('loading').style.display = 'none';
+      setPhase('intro');
+    }
+  }, 200);
+  // Timeout fallback
+  setTimeout(() => {
+    clearInterval(check);
+    document.getElementById('loading').innerHTML =
+      '<p style="color:#ff4757;max-width:380px;text-align:center;line-height:1.6;">' +
+      '⚠️ MediaPipe 로드 실패<br><small>인터넷 연결을 확인하고 페이지를 새로고침하세요.</small></p>';
+  }, 15000);
+});
+</script>
+</body>
+</html>
