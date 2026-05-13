@@ -892,19 +892,20 @@ function shareResult() {
   const emoji = sc < 20 ? '✅' : sc < 40 ? '🟡' : sc < 60 ? '🟠' : '🔴';
   const grade = sc < 20 ? '정상' : sc < 40 ? '경미' : sc < 60 ? '중등' : sc < 80 ? '심함' : '매우심함';
 
+  const pageUrl = window.location.href;
   const text =
     `👁️ 눈동자 음주 판별 테스트 결과\n\n` +
     `${emoji} 취한 정도: ${sc}/100 (${grade})\n` +
     `├ 추적 정확도: ${pursuit.toFixed(1)}%\n` +
     `├ 안구진탕:    ${nyst.toFixed(1)}%\n` +
     `└ 반응 딜레이: ${delay} ms\n\n` +
-    `나도 테스트 해보기 👉 https://allex1114.github.io`;
+    `나도 테스트 해보기 👉 ${pageUrl}`;
 
   if (navigator.share) {
     navigator.share({
       title: '👁️ 눈동자 음주 판별 테스트',
       text: text,
-      url: 'https://allex1114.github.io',
+      url: pageUrl,
     }).catch(e => { if (e.name !== 'AbortError') fallbackCopy(text); });
   } else {
     fallbackCopy(text);
