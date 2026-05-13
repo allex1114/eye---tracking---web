@@ -185,6 +185,37 @@ h1 {
 }
 .blink { animation:blink 1.2s ease infinite; }
 
+/* ── CONSENT / FEEDBACK ── */
+.consent-card, .feedback-card {
+  max-width:520px; width:90%;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:36px 36px;
+  text-align:center;
+}
+.consent-detail {
+  background:rgba(255,255,255,.04); border:1px solid var(--border);
+  border-radius:10px; padding:12px 16px;
+  font-size:.8rem; color:var(--dim); line-height:1.8;
+  text-align:left; margin-bottom:22px;
+}
+.drink-grid {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+}
+.drink-btn {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:14px 8px; cursor:pointer;
+  color:var(--text); font-size:1.4rem; transition:all .2s;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.drink-btn span { font-size:.75rem; color:var(--dim); font-weight:600; }
+.drink-btn:hover { border-color:var(--accent); background:rgba(124,107,255,.1); transform:translateY(-2px); }
+.drink-btn:active { transform:none; }
+.calibration-badge {
+  display:inline-block; background:rgba(0,212,170,.12);
+  border:1px solid rgba(0,212,170,.3); color:var(--success);
+  font-size:.72rem; border-radius:20px; padding:3px 10px;
+  margin-bottom:10px; letter-spacing:.3px;
+}
 /* ── LOADING OVERLAY ── */
 #loading {
   position:fixed; inset:0; z-index:100;
@@ -279,7 +310,7 @@ h1 {
 <!-- RESULTS -->
 <div id="phase-results" class="phase">
   <div class="results-inner">
-    <div class="res-header">
+    <div class="res-header" id="res-header">
       <h1 style="margin-bottom:6px;">검사 결과</h1>
       <p style="color:var(--dim);font-size:.88rem;">HGN 기반 안구 추적 분석 · <span id="res-samples">0</span>개 샘플 수집</p>
     </div>
@@ -319,6 +350,12 @@ h1 {
       <canvas id="res-chart" height="90"></canvas>
     </div>
 
+    <!-- 피드백 유도 (동의자에게만 3초 후 노출) -->
+    <div id="feedback-nudge" style="display:none;background:rgba(0,212,170,.07);border:1px solid rgba(0,212,170,.25);border-radius:12px;padding:14px 18px;margin-bottom:16px;text-align:center;">
+      <p style="font-size:.85rem;color:var(--success);margin-bottom:10px;">🧠 실제 음주량을 알려주시면 AI 모델이 더 정확해집니다!</p>
+      <button class="btn" style="padding:10px 28px;font-size:.9rem;" onclick="setPhase('feedback')">음주량 입력하기</button>
+    </div>
+
     <div class="res-footer">
       <div class="footer-btns">
         <button class="btn-kakao" onclick="shareResult()">💬 카카오톡 공유</button>
@@ -329,9 +366,53 @@ h1 {
   </div>
 </div>
 
+<!-- ── CONSENT PHASE ── -->
+<div id="phase-consent" class="phase">
+  <div class="consent-card fade-in">
+    <div style="font-size:2.4rem;margin-bottom:14px">🔬</div>
+    <h2 style="font-size:1.5rem;margin-bottom:10px;">데이터 수집 동의</h2>
+    <p style="color:var(--dim);font-size:.88rem;line-height:1.7;margin-bottom:18px;">
+      이 앱의 정확도를 높이기 위해 검사 결과를 익명으로 수집합니다.<br>
+      수집된 데이터는 <strong style="color:var(--text)">판별 모델 보정</strong>에만 사용됩니다.
+    </p>
+    <div class="consent-detail">
+      📋 수집 항목: 안구 추적 지표 (추적 정확도, 안구진탕, 딜레이)<br>
+      🚫 미수집: 카메라 영상, 이름, 이메일 등 개인 식별 정보<br>
+      🔒 저장소: Firebase (Google) — 암호화 전송
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn" onclick="setConsent(true)">✅ 동의합니다</button>
+      <button class="btn-ghost" onclick="setConsent(false)">비동의</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FEEDBACK PHASE ── -->
+<div id="phase-feedback" class="phase">
+  <div class="feedback-card fade-in">
+    <div style="font-size:2.4rem;margin-bottom:14px">🙏</div>
+    <h2 style="font-size:1.4rem;margin-bottom:8px;">실제 음주량 입력</h2>
+    <p style="color:var(--dim);font-size:.88rem;line-height:1.6;margin-bottom:22px;">
+      실제 음주량을 알려주시면 AI 모델 개선에 도움이 됩니다.<br>
+      <span style="font-size:.78rem;">데이터는 익명으로 처리되며 음주 권장 목적이 아닙니다.</span>
+    </p>
+    <div class="drink-grid">
+      <button class="drink-btn" onclick="submitFeedback(0)">🚫<br><span>안 마심</span></button>
+      <button class="drink-btn" onclick="submitFeedback(1)">🍺<br><span>1~2잔</span></button>
+      <button class="drink-btn" onclick="submitFeedback(2)">🍻<br><span>3~4잔</span></button>
+      <button class="drink-btn" onclick="submitFeedback(3)">🥃<br><span>5잔+</span></button>
+    </div>
+    <button class="btn-ghost" style="margin-top:16px;" onclick="skipFeedback()">건너뛰기</button>
+    <p id="fb-status" style="color:var(--success);font-size:.82rem;margin-top:12px;min-height:18px;"></p>
+  </div>
+</div>
+
 <!-- hidden video -->
 <video id="video" style="display:none" playsinline muted></video>
 
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
@@ -373,6 +454,12 @@ let faceOK      = false;
 
 // Last result (for sharing)
 let lastResult  = null;
+
+// Firebase
+let db              = null;
+let userConsented   = false;
+let adaptiveThresh  = null;  // [t1,t2,t3,t4] calibrated from real data
+let calibSampleCount = 0;
 
 /* ================================================================
    DOM
@@ -842,13 +929,27 @@ function showResults(m) {
 
   const sc = Math.min(100, Math.max(0, m.impairment));
 
-  // Color coding
+  // 적응형 임계값 — 누적 데이터가 충분하면 보정된 값 사용
+  const [t1, t2, t3, t4] = adaptiveThresh || [20, 40, 60, 80];
+
   let color, label, verdict, vbg;
-  if      (sc < 20) { color='#00d4aa'; label='정상';     verdict='✅ 음주 징후 없음 — 정상 범위의 안구 추적 능력입니다'; vbg='rgba(0,212,170,.08)'; }
-  else if (sc < 40) { color='#ffd166'; label='경미';     verdict='⚠️ 경미한 이상 — 일부 추적 불안정 요소가 감지됩니다'; vbg='rgba(255,209,102,.08)'; }
-  else if (sc < 60) { color='#ff9800'; label='중등';     verdict='⚠️ 중등도 이상 — 안구진탕 및 추적 지연이 관찰됩니다'; vbg='rgba(255,152,0,.08)'; }
-  else if (sc < 80) { color='#ff4757'; label='심함';     verdict='🔴 심한 이상 — 유의미한 안구진탕 및 추적 장애 관찰됨'; vbg='rgba(255,71,87,.08)'; }
+  if      (sc < t1) { color='#00d4aa'; label='정상';     verdict='✅ 음주 징후 없음 — 정상 범위의 안구 추적 능력입니다'; vbg='rgba(0,212,170,.08)'; }
+  else if (sc < t2) { color='#ffd166'; label='경미';     verdict='⚠️ 경미한 이상 — 일부 추적 불안정 요소가 감지됩니다'; vbg='rgba(255,209,102,.08)'; }
+  else if (sc < t3) { color='#ff9800'; label='중등';     verdict='⚠️ 중등도 이상 — 안구진탕 및 추적 지연이 관찰됩니다'; vbg='rgba(255,152,0,.08)'; }
+  else if (sc < t4) { color='#ff4757'; label='심함';     verdict='🔴 심한 이상 — 유의미한 안구진탕 및 추적 장애 관찰됨'; vbg='rgba(255,71,87,.08)'; }
   else              { color='#dc2626'; label='매우심함'; verdict='🔴 매우 심한 이상 — 안구 추적 능력이 크게 저하됨'; vbg='rgba(220,38,38,.08)'; }
+
+  // 보정 배지 표시
+  const header = document.getElementById('res-header');
+  const oldBadge = document.getElementById('calib-badge');
+  if (oldBadge) oldBadge.remove();
+  if (adaptiveThresh && calibSampleCount >= 10) {
+    const badge = document.createElement('div');
+    badge.id = 'calib-badge';
+    badge.className = 'calibration-badge';
+    badge.textContent = `🧠 학습 데이터 ${calibSampleCount}개 기반 보정 적용됨`;
+    header.insertAdjacentElement('afterbegin', badge);
+  }
 
   // Animate score ring
   const ring = document.getElementById('score-ring');
@@ -880,6 +981,14 @@ function showResults(m) {
 
   // Chart
   setTimeout(() => drawChart(m.samples), 200);
+
+  // 동의한 경우 일정 시간 후 피드백 화면 안내 버튼 노출
+  if (userConsented) {
+    setTimeout(() => {
+      const note = document.getElementById('feedback-nudge');
+      if (note) note.style.display = 'block';
+    }, 3000);
+  }
 }
 
 /* ================================================================
@@ -1024,6 +1133,96 @@ function resetApp() {
 }
 
 /* ================================================================
+   FIREBASE INIT + ADAPTIVE CALIBRATION
+   ================================================================ */
+function initFirebase() {
+  try {
+    const firebaseConfig = {
+      apiKey: "AIzaSyAVg9s7k_sRyIP0HZufjTpQvZ2L8kKqwic",
+      authDomain: "hgn-eye-tracker.firebaseapp.com",
+      projectId: "hgn-eye-tracker",
+      storageBucket: "hgn-eye-tracker.firebasestorage.app",
+      messagingSenderId: "1095755475120",
+      appId: "1:1095755475120:web:14b9a918bf2e7b8b0ef375"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    fetchCalibrationData();
+  } catch(e) {
+    console.warn('Firebase init failed:', e);
+  }
+}
+
+async function fetchCalibrationData() {
+  if (!db) return;
+  try {
+    const snap = await db.collection('hgn_records')
+      .orderBy('timestamp', 'desc').limit(300).get();
+    const records = snap.docs.map(d => d.data());
+    calibSampleCount = records.length;
+    const cal = computeAdaptiveThresholds(records);
+    if (cal) adaptiveThresh = cal;
+  } catch(e) { console.warn('Calibration fetch failed:', e); }
+}
+
+function computeAdaptiveThresholds(records) {
+  const sober = records.filter(r => r.selfReported === 0).map(r => r.impairment).sort((a,b)=>a-b);
+  const drunk = records.filter(r => r.selfReported >= 3).map(r => r.impairment).sort((a,b)=>a-b);
+  if (sober.length < 10 || drunk.length < 5) return null;
+
+  // 정상인 90번째 백분위 = 경미 시작점, 음주인 10번째 백분위 = 심함 시작점
+  const soberP90 = sober[Math.floor(sober.length * .90)];
+  const drunkP10 = drunk[Math.floor(drunk.length * .10)];
+  if (drunkP10 <= soberP90) return null;
+
+  const mid = (soberP90 + drunkP10) / 2;
+  return [
+    Math.round(soberP90 * .70),  // 정상 상한
+    Math.round(soberP90),        // 경미 상한
+    Math.round(mid),             // 중등 상한
+    Math.round(drunkP10),        // 심함 상한
+  ];
+}
+
+/* ================================================================
+   CONSENT MANAGEMENT
+   ================================================================ */
+function setConsent(agreed) {
+  userConsented = agreed;
+  localStorage.setItem('hgn_consent', agreed ? 'yes' : 'no');
+  if (agreed) initFirebase();
+  setPhase('intro');
+}
+
+/* ================================================================
+   FEEDBACK (자가 음주량 신고 + Firestore 업로드)
+   ================================================================ */
+async function submitFeedback(level) {
+  if (!db || !lastResult) { skipFeedback(); return; }
+  document.getElementById('fb-status').textContent = '전송 중...';
+  document.querySelectorAll('.drink-btn').forEach(b => b.disabled = true);
+  try {
+    await db.collection('hgn_records').add({
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      pursuit:    Math.round(lastResult.pursuit   * 10) / 10,
+      nyst:       Math.round(lastResult.nyst      * 10) / 10,
+      delay:      lastResult.delay,
+      deviation:  Math.round(lastResult.deviation * 10) / 10,
+      impairment: lastResult.sc,
+      selfReported: level,
+      version: '1.2'
+    });
+    document.getElementById('fb-status').textContent = '✅ 감사합니다! 모델 개선에 기여하셨습니다.';
+    setTimeout(() => { resetApp(); }, 1800);
+  } catch(e) {
+    document.getElementById('fb-status').textContent = '전송 실패. 건너뜁니다.';
+    setTimeout(() => { resetApp(); }, 1500);
+  }
+}
+
+function skipFeedback() { resetApp(); }
+
+/* ================================================================
    WINDOW RESIZE
    ================================================================ */
 window.addEventListener('resize', () => {
@@ -1041,7 +1240,16 @@ window.addEventListener('load', () => {
     if (typeof FaceMesh !== 'undefined' && typeof Camera !== 'undefined') {
       clearInterval(check);
       document.getElementById('loading').style.display = 'none';
-      setPhase('intro');
+
+      // 동의 여부 확인 — 첫 방문이면 consent 화면, 기존 방문이면 바로 intro
+      const savedConsent = localStorage.getItem('hgn_consent');
+      if (savedConsent === null) {
+        setPhase('consent');
+      } else {
+        userConsented = (savedConsent === 'yes');
+        if (userConsented) initFirebase();
+        setPhase('intro');
+      }
     }
   }, 200);
   // Timeout fallback
