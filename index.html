@@ -183,6 +183,7 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
       <div class="m-card"><div class="m-card-label">추적 지연 (Response Delay)</div><div class="m-card-val" id="r-delay" style="color:var(--accent)">-- ms</div><div class="m-bar"><div class="m-bar-fill" id="r-delay-bar" style="background:var(--accent);width:0%"></div></div></div>
       <div class="m-card"><div class="m-card-label">경로 이탈 (Path Deviation)</div><div class="m-card-val" id="r-dev" style="color:var(--accent2)">--%</div><div class="m-bar"><div class="m-bar-fill" id="r-dev-bar" style="background:var(--accent2);width:0%"></div></div></div>
     </div>
+    <div class="m-card" id="nhtsa-clues" style="margin-bottom:14px;"></div>
     <div class="chart-card"><div class="chart-title">▎ 자극 경로 vs 눈 추적 경로</div><canvas id="res-chart" height="90"></canvas></div>
     <div id="feedback-nudge" class="feedback-nudge" style="display:none;">
       <p style="font-size:.85rem;color:var(--success);margin-bottom:10px;">🧠 실제 음주량을 알려주시면 AI 모델이 더 정확해집니다!</p>
@@ -557,6 +558,16 @@ function updateHUD(){
 }
 
 /* ANALYSIS */
+// 특정 구간(zone) 전용 안구진탕 계산 (Clue 2, 3용)
+function nystagmusScoreZone(data){
+  if(data.length<6)return 0;
+  const vel=[];
+  for(let i=1;i<data.length;i++){const dt=data[i].t-data[i-1].t;if(dt>0&&dt<.15)vel.push((data[i].ex-data[i-1].ex)/dt*orientSign);}
+  if(vel.length<4)return 0;
+  const W=5;
+  const res=vel.map((v,i)=>{const s=Math.max(0,i-W),e=Math.min(vel.length,i+W+1);return v-vel.slice(s,e).reduce((a,b)=>a+b,0)/(e-s);});
+  return Math.min(100,Math.max(0,(Math.sqrt(variance(res))-.04)*90));
+}
 function nystagmusScore(data){
   if(data.length<10)return 0;
   const vel=[];
@@ -584,20 +595,55 @@ function finishTest(){
   const sign=orientSign,sx=valid.map(s=>s.sx),ex=valid.map(s=>s.ex*sign);
   const corr=pearson(sx,ex);
   const pursuit=Math.max(0,Math.min(100,corr*100));
-  const nyst=nystagmusScore(valid);
   const delay=estimateDelay(sx,ex,valid);
+
+  /* ── NHTSA 3-Clue HGN Scoring (SFST Manual, 2015) ──────────────
+     Clue 1: Lack of Smooth Pursuit  (per eye → max 2점)
+     Clue 2: Nystagmus at Max Deviation  (per eye → max 2점)
+     Clue 3: Onset of Nystagmus Prior to 45° (per eye → max 2점)
+     합계 6점 중 4점 이상 → BAC ≥ 0.08% (정확도 88%, San Diego study)
+     ────────────────────────────────────────────────────── */
+  const amp = CFG.STIM_AMPLITUDE;
+  // Clue 1: Smooth Pursuit — 전체 구간 상관계수
+  // NHTSA: corr < ~0.75 이면 pursuit 실패
+  const c1raw = Math.max(0, 0.90 - Math.max(0, corr)); // 0 at corr≥0.90
+  const c1 = Math.min(2, c1raw / 0.15 * 2);           // 0~2점 (양쪽 눈)
+
+  // Clue 2: Nystagmus at Maximum Deviation
+  // 자극이 최대 편향의 80% 이상 되는 구간만 분석
+  const maxDevSamples = valid.filter(s=>Math.abs(s.sx-0.5) > amp*0.80);
+  const c2raw = maxDevSamples.length >= 8
+    ? nystagmusScoreZone(maxDevSamples) : 0;
+  const c2 = Math.min(2, c2raw / 50 * 2);             // 0~2점
+
+  // Clue 3: Onset Prior to 45°
+  // NHTSA 기준 45° = 자극 범위의 약 55~70% 구간에서 진탕 감지
+  const zone45Samples = valid.filter(s=>{
+    const ecc=Math.abs(s.sx-0.5);
+    return ecc > amp*0.20 && ecc < amp*0.68; // 45도 이전 구간
+  });
+  const c3raw = zone45Samples.length >= 8
+    ? nystagmusScoreZone(zone45Samples) : 0;
+  const c3 = Math.min(2, c3raw / 40 * 2);             // 0~2점 (가장 BAC 특이적)
+
+  const totalClues = c1 + c2 + c3;                    // 0~6점
+
+  // deviation (Z-norm 방식 유지)
   const sxZ=zNorm(sx),exZ=zNorm(ex);
   const devRaw=mean(sxZ.map((sv,i)=>Math.abs(sv-exZ[i])));
   const deviation=Math.min(100,Math.max(0,(devRaw-.3)/1.5*100));
-  // 비선형 지수 변환: corr=0.93→~4점, corr=0→~99점
-  // 선형 공식의 문제(정상=17~25, 비추적=78)를 해결
-  const impairment=Math.min(100,Math.round(
-    Math.pow(Math.max(0,1-Math.max(0,corr)),1.5)*90 +
-    nyst*0.08 +
-    Math.min(1,delay/400)*5 +
-    deviation*0.03
+
+  // NHTSA: 4/6 clues = BAC≥0.08 (88%). 이를 기준점으로 점수 보정
+  // totalClues/6 비율을 주 드라이버로, pursuit 지수함수 보조
+  const clueRatio = totalClues / 6;
+  const impairment = Math.min(100, Math.round(
+    Math.pow(Math.max(0, 1-Math.max(0,corr)), 1.5) * 55 + // Clue1 기반
+    c2 / 2 * 25 +   // Clue2: max deviation nystagmus
+    c3 / 2 * 20     // Clue3: early onset (BAC≥0.08 특이적)
   ));
-  showResults({pursuit,nyst,delay,deviation,impairment,samples:valid});
+
+  showResults({pursuit,nyst:c2raw,delay,deviation,impairment,
+               c1,c2,c3,totalClues,samples:valid});
 }
 
 /* RESULTS */
@@ -627,6 +673,24 @@ function showResults(m){
   setMetric('r-nyst',m.nyst.toFixed(1)+'%',m.nyst,'#ffd166');
   setMetric('r-delay',m.delay+' ms',Math.min(100,m.delay/3.5),'#7c6bff');
   setMetric('r-dev',m.deviation.toFixed(1)+'%',m.deviation,'#ff6b9d');
+  // NHTSA 6-Clue 표시
+  if(m.totalClues!==undefined){
+    const el=document.getElementById('nhtsa-clues');
+    if(el){
+      const tc=Math.round(m.totalClues*10)/10;
+      const pct=Math.min(100,m.totalClues/6*100);
+      const clColor=m.totalClues>=4?'#ff4757':m.totalClues>=2?'#ffd166':'#00d4aa';
+      el.innerHTML='<div style="font-size:.75rem;color:var(--dim);margin-bottom:6px;letter-spacing:.5px;">NHTSA HGN 클루 점수 (6점 만점 · 4점 이상 = BAC ≥ 0.08%)</div>'
+        +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<div style="flex:1;height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;">'
+        +'<div style="width:'+pct+'%;height:100%;background:'+clColor+';border-radius:4px;transition:width 1s ease"></div></div>'
+        +'<div style="font-size:1.1rem;font-weight:800;color:'+clColor+';font-family:Courier New,monospace;min-width:36px">'+tc.toFixed(1)+'</div></div>'
+        +'<div style="display:flex;gap:8px;margin-top:8px;font-size:.72rem;color:var(--dim);">'
+        +'<span style="color:'+(m.c1>=1?color:'var(--dim)')+'">● 추적 '+(m.c1>=1?'✓':'✗')+'</span>'
+        +'<span style="color:'+(m.c2>=1?color:'var(--dim)')+'">● 최대편향 '+(m.c2>=1?'✓':'✗')+'</span>'
+        +'<span style="color:'+(m.c3>=1?color:'var(--dim)')+'">● 조기발현 '+(m.c3>=1?'✓':'✗')+'</span></div>';
+    }
+  }
   lastResult={...m,verdict,sc};
   setTimeout(()=>drawChart(m.samples),200);
   if(userConsented)setTimeout(()=>{const n=document.getElementById('feedback-nudge');if(n)n.style.display='block';},3000);
