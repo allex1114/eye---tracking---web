@@ -511,7 +511,8 @@ function collectSample(res){
       const lw=Math.abs(lR.x-lL.x)||.05,rw=Math.abs(rR.x-rL.x)||.05;
       const rawEx=((li.x-(lL.x+lR.x)/2)/lw+(ri.x-(rL.x+rR.x)/2)/rw)/2;
       // EMA 스무딩: 홍채 위치 노이즈 억제 (α=0.55: 노이즈↓, 반응성↑ 균형)
-      ex = smoothedEx===null ? rawEx : 0.55*rawEx + 0.45*smoothedEx;
+      // EMA α=0.75: 위상 지연 최소화하면서 노이즈 억제 (0.55에서 완화)
+      ex = smoothedEx===null ? rawEx : 0.75*rawEx + 0.25*smoothedEx;
       smoothedEx = ex;
       if(t<CFG.CALIB_DURATION_S){
         calibBuf.push({t,sx,ex});
@@ -528,7 +529,7 @@ function collectSample(res){
       headQ=Math.max(0,1-yawDev/0.25);
     }
   }
-  samples.push({t,sx,ex,valid:ex!==null&&headQ>0.3,headQ});
+  samples.push({t,sx,ex,valid:ex!==null,headQ});
 }
 function testLoop(now){
   const elapsed=now-testStart,t=elapsed/1000;
@@ -607,25 +608,6 @@ function computePursuitGain(valid, sign) {
   return trimmed.reduce((a,b)=>a+b,0)/trimmed.length;
 }
 
-// 다중 윈도우 Pearson 상관계수 (안정적인 Smooth Pursuit 측정)
-// 전체 구간 하나보다 여러 윈도우 중앙값이 노이즈에 강인함
-function multiWindowPearson(valid, sign) {
-  const n = valid.length;
-  if (n < 30) return pearson(valid.map(s=>s.sx), valid.map(s=>s.ex*sign));
-  const wins = 4, winSize = Math.floor(n / wins);
-  const corrs = [];
-  for (let w = 0; w < wins; w++) {
-    const seg = valid.slice(w*winSize, (w+1)*winSize);
-    const r = pearson(seg.map(s=>s.sx), seg.map(s=>s.ex*sign));
-    if (!isNaN(r)) corrs.push(r);
-  }
-  if (!corrs.length) return 0;
-  corrs.sort((a,b)=>a-b);
-  // 중앙값 사용 (이상치 윈도우 영향 최소화)
-  const mid = Math.floor(corrs.length/2);
-  return corrs.length%2===0 ? (corrs[mid-1]+corrs[mid])/2 : corrs[mid];
-}
-
 // 특정 구간(zone) 전용 안구진탕 계산 (Clue 2, 3용)
 function nystagmusScoreZone(data){
   if(data.length<6)return 0;
@@ -664,7 +646,7 @@ function finishTest(){
   if(valid.length<CFG.MIN_VALID){alert('데이터가 부족합니다. 다시 시도해주세요.');resetApp();return;}
   if(orientSign===0){const re=valid.map(s=>s.ex),rs=valid.map(s=>s.sx);orientSign=pearson(rs,re)>=pearson(rs,re.map(v=>-v))?1:-1;}
   const sign=orientSign,sx=valid.map(s=>s.sx),ex=valid.map(s=>s.ex*sign);
-  const corr=multiWindowPearson(valid,sign); // 다중 윈도우 중앙값 상관계수
+  const corr=pearson(sx,ex); // 전체 구간 단일 상관계수 (안정적)
   const pursuit=Math.max(0,Math.min(100,corr*100));
   const delay=estimateDelay(sx,ex,valid);
 
