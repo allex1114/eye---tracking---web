@@ -491,7 +491,14 @@ function startTest(){
 }
 function stimPos(t){
   if(t<CFG.CALIB_DURATION_S)return .5+CFG.STIM_AMPLITUDE*(t/CFG.CALIB_DURATION_S);
-  return .5+CFG.STIM_AMPLITUDE*Math.sin(2*Math.PI*CFG.STIM_FREQ_HZ*(t-CFG.CALIB_DURATION_S));
+  const b=t-CFG.CALIB_DURATION_S;
+  // 두 비주기 주파수 합성 (황금비 1.618배 차이 → 수학적으로 절대 반복 없음)
+  // NHTSA: 피검자가 경로를 예측할 수 없어야 소뇌 추적 능력 정확히 측정 가능
+  const f1=CFG.STIM_FREQ_HZ;           // 0.40 Hz (주 움직임)
+  const f2=CFG.STIM_FREQ_HZ*1.618;     // 0.647 Hz (황금비 교란)
+  const raw=0.72*Math.sin(2*Math.PI*f1*b)+0.28*Math.sin(2*Math.PI*f2*b);
+  // 전체 범위 내로 클램프 (±AMPLITUDE 보장)
+  return .5+Math.max(-1,Math.min(1,raw))*CFG.STIM_AMPLITUDE;
 }
 function collectSample(res){
   const t=(performance.now()-testStart)/1000,sx=stimPos(t);
@@ -558,6 +565,26 @@ function updateHUD(){
 }
 
 /* ANALYSIS */
+// Smooth Pursuit Velocity Gain (Roche & King, 2015)
+// gain = eye_velocity / stimulus_velocity (자극이 활발히 움직이는 구간만)
+// 정상: ~0.85-0.95, BAC 0.04%: ~0.75-0.82, BAC 0.08%+: ~0.60-0.72
+function computePursuitGain(valid, sign) {
+  const gains = [];
+  for (let i = 1; i < valid.length; i++) {
+    const dt = valid[i].t - valid[i-1].t;
+    if (dt <= 0 || dt > 0.12) continue;
+    const stimV = (valid[i].sx - valid[i-1].sx) / dt;
+    if (Math.abs(stimV) < 0.8) continue; // 자극이 정지·극단에 있으면 제외
+    const eyeV = (valid[i].ex - valid[i-1].ex) / dt * sign;
+    const g = eyeV / stimV;
+    if (g > 0.1 && g < 2.5) gains.push(g); // 비이상적 값 제거
+  }
+  if (gains.length < 10) return null;
+  // 중앙값 사용 (평균보다 이상치에 강인)
+  gains.sort((a, b) => a - b);
+  return gains[Math.floor(gains.length / 2)];
+}
+
 // 특정 구간(zone) 전용 안구진탕 계산 (Clue 2, 3용)
 function nystagmusScoreZone(data){
   if(data.length<6)return 0;
@@ -597,17 +624,24 @@ function finishTest(){
   const pursuit=Math.max(0,Math.min(100,corr*100));
   const delay=estimateDelay(sx,ex,valid);
 
-  /* ── NHTSA 3-Clue HGN Scoring (SFST Manual, 2015) ──────────────
-     Clue 1: Lack of Smooth Pursuit  (per eye → max 2점)
-     Clue 2: Nystagmus at Max Deviation  (per eye → max 2점)
-     Clue 3: Onset of Nystagmus Prior to 45° (per eye → max 2점)
-     합계 6점 중 4점 이상 → BAC ≥ 0.08% (정확도 88%, San Diego study)
+  /* ── NHTSA 3-Clue HGN Scoring ──────────────────────────────────
+     Clue 1: Lack of Smooth Pursuit  (Roche & King 2015 기반 gain 보정)
+     Clue 2: Nystagmus at Max Deviation  (SFST Manual 2015)
+     Clue 3: Onset of Nystagmus Prior to 45° (SFST Manual 2015)
+     합계 6점 중 4점 이상 → BAC ≥ 0.08% (San Diego study, 88% 정확도)
      ────────────────────────────────────────────────────── */
   const amp = CFG.STIM_AMPLITUDE;
-  // Clue 1: Smooth Pursuit — 전체 구간 상관계수
-  // NHTSA: corr < ~0.75 이면 pursuit 실패
-  const c1raw = Math.max(0, 0.90 - Math.max(0, corr)); // 0 at corr≥0.90
-  const c1 = Math.min(2, c1raw / 0.15 * 2);           // 0~2점 (양쪽 눈)
+
+  // Clue 1: Smooth Pursuit — 상관계수(방향) + Velocity Gain(속도) 결합
+  // Roche & King (2015): gain sober=0.88~0.95, BAC0.04%=0.76, BAC0.08%+=0.64
+  const gain = computePursuitGain(valid, sign);
+  const gainNorm = gain !== null
+    ? Math.max(0, (0.92 - gain) / 0.30)  // 0 at gain≥0.92, 1 at gain≤0.62
+    : 0;
+  const corrNorm = Math.max(0, 0.90 - Math.max(0, corr)); // 0 at corr≥0.90
+  // 상관계수 60% + gain 40% 가중 합산
+  const c1raw = corrNorm * 0.60 + gainNorm * 0.40;
+  const c1 = Math.min(2, c1raw / 0.15 * 2);  // 0~2점
 
   // Clue 2: Nystagmus at Maximum Deviation
   // 자극이 최대 편향의 80% 이상 되는 구간만 분석
@@ -643,7 +677,7 @@ function finishTest(){
   ));
 
   showResults({pursuit,nyst:c2raw,delay,deviation,impairment,
-               c1,c2,c3,totalClues,samples:valid});
+               c1,c2,c3,totalClues,gain,samples:valid});
 }
 
 /* RESULTS */
@@ -669,7 +703,11 @@ function showResults(m){
   const numEl=document.getElementById('score-num');numEl.style.color=color;
   let cur=0;const iv=setInterval(()=>{cur=Math.min(sc,cur+2);numEl.textContent=cur;if(cur>=sc)clearInterval(iv);},18);
   const vb=document.getElementById('verdict-box');vb.textContent=verdict;vb.style.borderColor=color;vb.style.background=vbg;vb.style.color=color;
-  setMetric('r-pursuit',m.pursuit.toFixed(1)+'%',m.pursuit,'#00d4aa');
+  // Smooth Pursuit 카드에 gain 값도 표시
+  const pursuitLabel = (m.gain !== null && m.gain !== undefined)
+    ? m.pursuit.toFixed(1)+'% (gain '+m.gain.toFixed(2)+')'
+    : m.pursuit.toFixed(1)+'%';
+  setMetric('r-pursuit', pursuitLabel, m.pursuit, '#00d4aa');
   setMetric('r-nyst',m.nyst.toFixed(1)+'%',m.nyst,'#ffd166');
   setMetric('r-delay',m.delay+' ms',Math.min(100,m.delay/3.5),'#7c6bff');
   setMetric('r-dev',m.deviation.toFixed(1)+'%',m.deviation,'#ff6b9d');
