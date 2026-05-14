@@ -502,7 +502,7 @@ function stimPos(t){
 }
 function collectSample(res){
   const t=(performance.now()-testStart)/1000,sx=stimPos(t);
-  let ex=null;
+  let ex=null, headQ=1.0;
   if(res.multiFaceLandmarks&&res.multiFaceLandmarks.length>0){
     const lm=res.multiFaceLandmarks[0];
     if(lm.length>477){
@@ -516,25 +516,15 @@ function collectSample(res){
           if(Math.abs(dex)>.01)orientSign=Math.sign(dsx*dex);
         }
       }
+      /* 머리 회전 보정 — lm 스코프 안에서 처리 (버그 수정: 이전엔 스코프 밖에서 lm 참조해 에러 발생) */
+      const lw2=Math.abs(lR.x-lL.x)||.05, rw2=Math.abs(rR.x-rL.x)||.05;
+      const yawRatio=lw2/rw2;
+      ex=ex+(1-yawRatio)*0.18;
+      const yawDev=Math.abs(yawRatio-1.0);
+      headQ=Math.max(0,1-yawDev/0.25);
     }
   }
-  /* 머리 회전 보정 (Head Yaw Compensation)
-     좌·우 눈 너비 비율 변화 = 머리 회전 지표
-     머리가 오른쪽으로 돌면 왼쪽 눈이 좁아짐 (lw < rw)
-     이 불균형만큼 홍채 위치 보정 + 심한 경우 품질 저하 */
-  let headQ = 1.0; // 머리 안정 품질 (1=완벽, 0=불안정)
-  if (ex !== null && lm && lm.length > 477) {
-    const lL=lm[33], lR=lm[133], rL=lm[362], rR=lm[263];
-    const lw2=Math.abs(lR.x-lL.x)||.05, rw2=Math.abs(rR.x-rL.x)||.05;
-    const yawRatio = lw2 / rw2; // ~1.0 when head straight
-    // 보정: 왼쪽 눈이 좁을수록(회전) 홍채가 반대쪽으로 보정
-    const correction = (1 - yawRatio) * 0.18;
-    ex = ex + correction;
-    // 품질: 비율이 0.75~1.25 밖이면 머리 많이 돌린 것 → 신뢰도 하락
-    const yawDev = Math.abs(yawRatio - 1.0);
-    headQ = Math.max(0, 1 - yawDev / 0.25);
-  }
-  samples.push({t, sx, ex, valid: ex !== null && headQ > 0.3, headQ});
+  samples.push({t,sx,ex,valid:ex!==null&&headQ>0.3,headQ});
 }
 function testLoop(now){
   const elapsed=now-testStart,t=elapsed/1000;
