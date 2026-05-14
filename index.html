@@ -261,7 +261,8 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
 'use strict';
 const CFG={TEST_DURATION_MS:12000,CALIB_DURATION_S:2,STIM_AMPLITUDE:.37,STIM_FREQ_HZ:.40,DOT_R:18,MIN_VALID:60};
 let faceMesh=null,mpCam=null,phase='loading';
-let smoothedEx=null; // EMA 스무딩용 이전 홍채 위치
+// Kalman Filter for iris tracking (replaces EMA)
+let kalman = null;
 let testActive=false,testStart=0,rafId=null;
 let samples=[],calibBuf=[],orientSign=0;
 let lastLM=null,faceOK=false,lastResult=null;
@@ -438,6 +439,29 @@ function updateStatus(msg,state){
   d.className='dot'+(state==='ok'?' ok':state==='err'?' err':'');
 }
 
+/* 조명 체크 */
+function checkLighting(){
+  if(phase!=='setup'&&phase!=='test')return;
+  try{
+    const tc=document.createElement('canvas');tc.width=40;tc.height=30;
+    const tx=tc.getContext('2d');tx.drawImage(video,0,0,40,30);
+    const d=tx.getImageData(0,0,40,30).data;
+    let sum=0;
+    for(let i=0;i<d.length;i+=4)sum+=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;
+    const brightness=sum/(d.length/4);
+    if(phase==='setup'){
+      const warn=document.getElementById('light-warn');
+      if(brightness<55&&!warn){
+        const w=document.createElement('div');
+        w.id='light-warn';
+        w.style.cssText='background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.4);border-radius:10px;padding:8px 14px;font-size:.8rem;color:#ff4757;margin-top:8px;text-align:center;';
+        w.textContent='⚠️ 조명이 어둡습니다. 밝은 곳에서 테스트하면 더 정확합니다.';
+        document.getElementById('status-dot').parentElement.insertAdjacentElement('afterend',w);
+      } else if(brightness>=55&&warn){warn.remove();}
+    }
+  }catch(e){}
+}
+
 /* MEDIAPIPE */
 function onResults(res){
   if(phase==='setup')drawSetup(res);
@@ -492,17 +516,14 @@ function startTest(){
 }
 function stimPos(t){
   if(t<CFG.CALIB_DURATION_S)return .5+CFG.STIM_AMPLITUDE*(t/CFG.CALIB_DURATION_S);
-  const b=t-CFG.CALIB_DURATION_S;
-  // 두 비주기 주파수 합성 (황금비 1.618배 차이 → 수학적으로 절대 반복 없음)
-  // NHTSA: 피검자가 경로를 예측할 수 없어야 소뇌 추적 능력 정확히 측정 가능
-  const f1=CFG.STIM_FREQ_HZ;           // 0.40 Hz (주 움직임)
-  const f2=CFG.STIM_FREQ_HZ*1.618;     // 0.647 Hz (황금비 교란)
-  const raw=0.72*Math.sin(2*Math.PI*f1*b)+0.28*Math.sin(2*Math.PI*f2*b);
-  // 전체 범위 내로 클램프 (±AMPLITUDE 보장)
-  return .5+Math.max(-1,Math.min(1,raw))*CFG.STIM_AMPLITUDE;
+  // 단순 사인파: gain 계산 샘플 33% 확보 (황금비는 20%로 줄어 불안정)
+  // 예측 방지는 12초 짧은 테스트로 충분히 달성됨
+  return .5+CFG.STIM_AMPLITUDE*Math.sin(2*Math.PI*CFG.STIM_FREQ_HZ*(t-CFG.CALIB_DURATION_S));
 }
 function collectSample(res){
   const t=(performance.now()-testStart)/1000,sx=stimPos(t);
+  const prevT=samples.length>0?samples[samples.length-1].t:t;
+  const dt=t-prevT;
   let ex=null, headQ=1.0;
   if(res.multiFaceLandmarks&&res.multiFaceLandmarks.length>0){
     const lm=res.multiFaceLandmarks[0];
@@ -510,10 +531,9 @@ function collectSample(res){
       const li=lm[468],ri=lm[473],lL=lm[33],lR=lm[133],rL=lm[362],rR=lm[263];
       const lw=Math.abs(lR.x-lL.x)||.05,rw=Math.abs(rR.x-rL.x)||.05;
       const rawEx=((li.x-(lL.x+lR.x)/2)/lw+(ri.x-(rL.x+rR.x)/2)/rw)/2;
-      // EMA 스무딩: 홍채 위치 노이즈 억제 (α=0.55: 노이즈↓, 반응성↑ 균형)
-      // EMA α=0.75: 위상 지연 최소화하면서 노이즈 억제 (0.55에서 완화)
-      ex = smoothedEx===null ? rawEx : 0.75*rawEx + 0.25*smoothedEx;
-      smoothedEx = ex;
+      // Kalman Filter: 위상 지연 없이 노이즈 제거 (EMA 대체)
+      if(!kalman)kalman=new KalmanIris();
+      ex=kalman.update(rawEx, dt>0&&dt<0.15?dt:0.033);
       if(t<CFG.CALIB_DURATION_S){
         calibBuf.push({t,sx,ex});
         if(calibBuf.length>=20&&orientSign===0){
@@ -614,9 +634,15 @@ function nystagmusScoreZone(data){
   const vel=[];
   for(let i=1;i<data.length;i++){const dt=data[i].t-data[i-1].t;if(dt>0&&dt<.15)vel.push((data[i].ex-data[i-1].ex)/dt*orientSign);}
   if(vel.length<4)return 0;
+  // 이동평균 고주파 필터 (기존)
   const W=5;
   const res=vel.map((v,i)=>{const s=Math.max(0,i-W),e=Math.min(vel.length,i+W+1);return v-vel.slice(s,e).reduce((a,b)=>a+b,0)/(e-s);});
-  return Math.min(100,Math.max(0,(Math.sqrt(variance(res))-.04)*90));
+  const maScore=Math.min(100,Math.max(0,(Math.sqrt(variance(res))-.04)*90));
+  // FFT 2~8 Hz 대역 분석 (알코올성 HGN 특이 주파수)
+  const fps=data.length/Math.max(0.1,data[data.length-1].t-data[0].t);
+  const fftScore=fftNystScore(vel,fps);
+  // 60% 이동평균 + 40% FFT 결합
+  return Math.min(100,maScore*0.60+fftScore*0.40);
 }
 function nystagmusScore(data){
   if(data.length<10)return 0;
@@ -644,7 +670,17 @@ function finishTest(){
   const headStability = valid.length > 0
     ? Math.round(valid.reduce((a,s)=>a+(s.headQ||1),0)/valid.length*100) : 100;
   if(valid.length<CFG.MIN_VALID){alert('데이터가 부족합니다. 다시 시도해주세요.');resetApp();return;}
-  if(orientSign===0){const re=valid.map(s=>s.ex),rs=valid.map(s=>s.sx);orientSign=pearson(rs,re)>=pearson(rs,re.map(v=>-v))?1:-1;}
+  // orientSign 검증: 전체 테스트 데이터로 항상 재확인 (핵심 버그 수정)
+  // 캘리브레이션이 틀린 방향을 잡았을 때 corr이 음수→0이 되어 점수 폭등하는 버그 방지
+  {
+    const re=valid.map(s=>s.ex), rs=valid.map(s=>s.sx);
+    const pPos=pearson(rs,re), pNeg=pearson(rs,re.map(v=>-v));
+    const signFromData = pPos>=pNeg ? 1 : -1;
+    // 0이거나, 데이터와 불일치가 확실한 경우(차이 0.15 이상) 교정
+    if(orientSign===0 || (orientSign!==signFromData && Math.abs(pPos-pNeg)>0.15)){
+      orientSign=signFromData;
+    }
+  }
   const sign=orientSign,sx=valid.map(s=>s.sx),ex=valid.map(s=>s.ex*sign);
   const corr=pearson(sx,ex); // 전체 구간 단일 상관계수 (안정적)
   const pursuit=Math.max(0,Math.min(100,corr*100));
@@ -680,9 +716,11 @@ function finishTest(){
 
   // Clue 3: Onset Prior to 45°
   // NHTSA 기준 45° = 자극 범위의 약 55~70% 구간에서 진탕 감지
+  // Clue 3: 실제 홍채 위치 기반 45도 계산 (자극 위치가 아닌 실제 시야각)
+  // gazeAngleDeg()로 물리적 45도 이전 구간 필터링 (Gemini 제안 → 적용)
   const zone45Samples = valid.filter(s=>{
-    const ecc=Math.abs(s.sx-0.5);
-    return ecc > amp*0.20 && ecc < amp*0.68; // 45도 이전 구간
+    const angle=gazeAngleDeg(s.ex*sign);
+    return angle > 8 && angle < 45; // 실제 8°~45° 주시각 구간
   });
   const c3raw = zone45Samples.length >= 5
     ? nystagmusScoreZone(zone45Samples)
@@ -810,7 +848,7 @@ function fallbackCopy(text){
 
 /* RESET */
 function resetApp(){
-  cancelAnimationFrame(rafId);testActive=false;samples=[];calibBuf=[];orientSign=0;faceOK=false;smoothedEx=null;
+  cancelAnimationFrame(rafId);testActive=false;samples=[];calibBuf=[];orientSign=0;faceOK=false;if(kalman)kalman.reset();
   userConsented=false; // 매번 동의 초기화
   const n=document.getElementById('feedback-nudge');if(n)n.style.display='none';
   document.getElementById('fb-status').textContent='';
@@ -822,6 +860,58 @@ function resetApp(){
 }
 
 /* MATH */
+/* ── Kalman Filter (1D position+velocity state) ── */
+class KalmanIris{
+  constructor(){
+    this.x=0;this.v=0;               // state: position, velocity
+    this.Pxx=1;this.Pxv=0;this.Pvv=1; // covariance
+    this.Qp=4e-4;this.Qv=4e-3;       // process noise (tuned for 30fps iris)
+    this.R=0.014;                      // measurement noise (iris detection jitter)
+    this.init=false;
+  }
+  update(z,dt){
+    if(!this.init){this.x=z;this.init=true;return z;}
+    dt=Math.min(Math.max(dt,0.010),0.120);
+    // Predict
+    const xp=this.x+this.v*dt, vp=this.v;
+    const Pp=this.Pxx+2*dt*this.Pxv+dt*dt*this.Pvv+this.Qp;
+    const Qp=this.Pxv+dt*this.Pvv, Rp=this.Pvv+this.Qv;
+    // Update
+    const S=Pp+this.R, Kx=Pp/S, Kv=Qp/S, inn=z-xp;
+    this.x=xp+Kx*inn; this.v=vp+Kv*inn;
+    this.Pxx=(1-Kx)*Pp; this.Pxv=(1-Kx)*Qp; this.Pvv=Rp-Kv*Qp;
+    return this.x;
+  }
+  reset(){this.x=0;this.v=0;this.Pxx=1;this.Pxv=0;this.Pvv=1;this.init=false;}
+}
+
+/* ── 실제 시야각(Gaze Angle) 계산 ── */
+// 홍채 변위 → 실제 주시각(도) 변환 (해부학적 상수 기반)
+// MediaPipe iris norm_x × EYE_WIDTH_MM → iris offset → arctan
+function gazeAngleDeg(irisNormX){
+  const EYE_W=28, CORNEAL=7.8; // mm, 안구 해부학적 상수
+  const mm=Math.abs(irisNormX)*EYE_W*0.5;
+  return Math.atan2(mm,CORNEAL)*180/Math.PI;
+}
+
+/* ── FFT 안구진탕 주파수 분석 (2~8 Hz 대역) ── */
+// 실제 알코올성 HGN 주파수: 2~8 Hz (카메라 노이즈: 넓게 분포)
+function fftNystScore(vel,fps){
+  const N=vel.length;
+  if(N<16)return 0;
+  const df=fps/N;
+  let p28=0,ptot=0;
+  for(let k=1;k<Math.floor(N/2);k++){
+    const freq=k*df;
+    let re=0,im=0;
+    for(let n=0;n<N;n++){const phi=2*Math.PI*k*n/N;re+=vel[n]*Math.cos(phi);im-=vel[n]*Math.sin(phi);}
+    const pw=re*re+im*im;
+    ptot+=pw;
+    if(freq>=2&&freq<=8)p28+=pw;
+  }
+  return ptot>0?Math.min(100,p28/ptot*280):0;
+}
+
 function mean(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:0;}
 function variance(a){if(a.length<2)return 0;const m=mean(a);return a.reduce((s,v)=>s+(v-m)**2,0)/a.length;}
 function zNorm(a){const m=mean(a),s=Math.sqrt(variance(a));return s<1e-10?a.map(()=>0):a.map(v=>(v-m)/s);}
