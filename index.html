@@ -518,7 +518,23 @@ function collectSample(res){
       }
     }
   }
-  samples.push({t,sx,ex,valid:ex!==null});
+  /* 머리 회전 보정 (Head Yaw Compensation)
+     좌·우 눈 너비 비율 변화 = 머리 회전 지표
+     머리가 오른쪽으로 돌면 왼쪽 눈이 좁아짐 (lw < rw)
+     이 불균형만큼 홍채 위치 보정 + 심한 경우 품질 저하 */
+  let headQ = 1.0; // 머리 안정 품질 (1=완벽, 0=불안정)
+  if (ex !== null && lm && lm.length > 477) {
+    const lL=lm[33], lR=lm[133], rL=lm[362], rR=lm[263];
+    const lw2=Math.abs(lR.x-lL.x)||.05, rw2=Math.abs(rR.x-rL.x)||.05;
+    const yawRatio = lw2 / rw2; // ~1.0 when head straight
+    // 보정: 왼쪽 눈이 좁을수록(회전) 홍채가 반대쪽으로 보정
+    const correction = (1 - yawRatio) * 0.18;
+    ex = ex + correction;
+    // 품질: 비율이 0.75~1.25 밖이면 머리 많이 돌린 것 → 신뢰도 하락
+    const yawDev = Math.abs(yawRatio - 1.0);
+    headQ = Math.max(0, 1 - yawDev / 0.25);
+  }
+  samples.push({t, sx, ex, valid: ex !== null && headQ > 0.3, headQ});
 }
 function testLoop(now){
   const elapsed=now-testStart,t=elapsed/1000;
@@ -569,20 +585,32 @@ function updateHUD(){
 // gain = eye_velocity / stimulus_velocity (자극이 활발히 움직이는 구간만)
 // 정상: ~0.85-0.95, BAC 0.04%: ~0.75-0.82, BAC 0.08%+: ~0.60-0.72
 function computePursuitGain(valid, sign) {
+  /* Saccade 필터링 (Roche & King 2015 방법론)
+     안구도약(saccade) 특징: 눈 속도가 자극 속도의 4배 이상
+     Smooth pursuit: 눈 속도 ≈ 자극 속도 (gain ~0.85-0.95)
+     Saccade: 눈 속도 >> 자극 속도 (ratio >4-10x) → 제거 */
   const gains = [];
-  for (let i = 1; i < valid.length; i++) {
+  let saccadeCount = 0;
+  for (let i = 2; i < valid.length - 1; i++) {
     const dt = valid[i].t - valid[i-1].t;
     if (dt <= 0 || dt > 0.12) continue;
+    // 머리 품질 낮은 프레임 제외
+    if ((valid[i].headQ || 1) < 0.4) continue;
     const stimV = (valid[i].sx - valid[i-1].sx) / dt;
-    if (Math.abs(stimV) < 0.8) continue; // 자극이 정지·극단에 있으면 제외
+    if (Math.abs(stimV) < 0.8) continue; // 자극 정지/극단 제외
     const eyeV = (valid[i].ex - valid[i-1].ex) / dt * sign;
+    // Saccade 감지: 눈 속도/자극 속도 비율이 너무 크거나, 절대 속도가 너무 큼
+    const velRatio = Math.abs(eyeV) / (Math.abs(stimV) + 0.001);
+    if (velRatio > 4.5) { saccadeCount++; continue; } // saccade → 제외
     const g = eyeV / stimV;
-    if (g > 0.1 && g < 2.5) gains.push(g); // 비이상적 값 제거
+    if (g > 0.05 && g < 2.8) gains.push(g);
   }
-  if (gains.length < 10) return null;
-  // 중앙값 사용 (평균보다 이상치에 강인)
+  if (gains.length < 8) return null;
   gains.sort((a, b) => a - b);
-  return gains[Math.floor(gains.length / 2)];
+  // Winsorized mean (상하위 15% 제거 후 평균)
+  const trim = Math.floor(gains.length * 0.15);
+  const trimmed = gains.slice(trim, gains.length - trim);
+  return trimmed.reduce((a,b)=>a+b,0)/trimmed.length;
 }
 
 // 특정 구간(zone) 전용 안구진탕 계산 (Clue 2, 3용)
@@ -617,6 +645,9 @@ function estimateDelay(sx,ex,data){
 function finishTest(){
   cancelAnimationFrame(rafId);
   const valid=samples.filter(s=>s.valid&&s.t>=CFG.CALIB_DURATION_S);
+  // 머리 안정성 점수 (0~100, 높을수록 좋음)
+  const headStability = valid.length > 0
+    ? Math.round(valid.reduce((a,s)=>a+(s.headQ||1),0)/valid.length*100) : 100;
   if(valid.length<CFG.MIN_VALID){alert('데이터가 부족합니다. 다시 시도해주세요.');resetApp();return;}
   if(orientSign===0){const re=valid.map(s=>s.ex),rs=valid.map(s=>s.sx);orientSign=pearson(rs,re)>=pearson(rs,re.map(v=>-v))?1:-1;}
   const sign=orientSign,sx=valid.map(s=>s.sx),ex=valid.map(s=>s.ex*sign);
@@ -677,7 +708,7 @@ function finishTest(){
   ));
 
   showResults({pursuit,nyst:c2raw,delay,deviation,impairment,
-               c1,c2,c3,totalClues,gain,samples:valid});
+               c1,c2,c3,totalClues,gain,headStability,samples:valid});
 }
 
 /* RESULTS */
@@ -728,6 +759,15 @@ function showResults(m){
         +'<span style="color:'+(m.c2>=1?color:'var(--dim)')+'">● 최대편향 '+(m.c2>=1?'✓':'✗')+'</span>'
         +'<span style="color:'+(m.c3>=1?color:'var(--dim)')+'">● 조기발현 '+(m.c3>=1?'✓':'✗')+'</span></div>';
     }
+  }
+  // 머리 안정성 경고 (70% 미만이면 표시)
+  const oldWarn=document.getElementById('head-warn'); if(oldWarn)oldWarn.remove();
+  if(m.headStability!==undefined && m.headStability<70){
+    const w=document.createElement('div');
+    w.id='head-warn';
+    w.style.cssText='background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:10px;padding:10px 14px;font-size:.8rem;color:var(--warn);margin-bottom:14px;line-height:1.6;';
+    w.textContent='⚠️ 테스트 중 머리 움직임이 감지됐습니다 (안정성 '+m.headStability+'%). 머리를 고정하고 재측정하면 더 정확한 결과를 얻을 수 있습니다.';
+    const vb=document.getElementById('verdict-box'); if(vb) vb.insertAdjacentElement('afterend',w);
   }
   lastResult={...m,verdict,sc};
   setTimeout(()=>drawChart(m.samples),200);
