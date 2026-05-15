@@ -614,9 +614,19 @@ function collectSample(res){
     const lm=res.multiFaceLandmarks[0];
     if(lm.length>477){
       const li=lm[468],ri=lm[473],lL=lm[33],lR=lm[133],rL=lm[362],rR=lm[263];
-      const lw=Math.abs(lR.x-lL.x)||.05,rw=Math.abs(rR.x-rL.x)||.05;
-      const rawEx=((li.x-(lL.x+lR.x)/2)/lw+(ri.x-(rL.x+rR.x)/2)/rw)/2;
-      // Kalman Filter: 위상 지연 없이 노이즈 제거 (EMA 대체)
+      const lw=Math.abs(lR.x-lL.x)||.05, rw=Math.abs(rR.x-rL.x)||.05;
+      // 눈 중심점
+      const lCx=(lL.x+lR.x)/2, lCy=(lL.y+lR.y)/2;
+      const rCx=(rL.x+rR.x)/2, rCy=(rL.y+rR.y)/2;
+      // 눈-눈 벡터를 기준축으로 홍채 위치 투영 → roll 보정
+      // 고개가 기울어도 얼굴 좌표계 기준으로 측정하므로 roll 영향 제거
+      const eyeVecX=rCx-lCx, eyeVecY=rCy-lCy;
+      const eyeDist=Math.sqrt(eyeVecX*eyeVecX+eyeVecY*eyeVecY)||0.1;
+      const cosR=eyeVecX/eyeDist, sinR=eyeVecY/eyeDist;
+      const rawEx=(
+        ((li.x-lCx)*cosR+(li.y-lCy)*sinR)/lw +
+        ((ri.x-rCx)*cosR+(ri.y-rCy)*sinR)/rw
+      )/2;
       if(!kalman)kalman=new KalmanIris();
       ex=kalman.update(rawEx, dt>0&&dt<0.15?dt:0.033);
       if(t<CFG.CALIB_DURATION_S){
@@ -626,12 +636,13 @@ function collectSample(res){
           if(Math.abs(dex)>.01)orientSign=Math.sign(dsx*dex);
         }
       }
-      /* 머리 회전 보정 — lm 스코프 안에서 처리 (버그 수정: 이전엔 스코프 밖에서 lm 참조해 에러 발생) */
-      const lw2=Math.abs(lR.x-lL.x)||.05, rw2=Math.abs(rR.x-rL.x)||.05;
-      const yawRatio=lw2/rw2;
+      // Yaw(좌우 고개 회전) 보정
+      const yawRatio=lw/rw;
       ex=ex+(1-yawRatio)*0.18;
+      // 머리 안정성: yaw + roll 이탈 정도를 모두 반영
+      const rollDeg=Math.abs(Math.atan2(eyeVecY,eyeVecX)*180/Math.PI);
       const yawDev=Math.abs(yawRatio-1.0);
-      headQ=Math.max(0,1-yawDev/0.25);
+      headQ=Math.max(0,1-Math.max(yawDev/0.25, rollDeg/20));
     }
   }
   samples.push({t,sx,ex,valid:ex!==null,headQ});
@@ -819,14 +830,19 @@ function finishTest(){
   const devRaw=mean(sxZ.map((sv,i)=>Math.abs(sv-exZ[i])));
   const deviation=Math.min(100,Math.max(0,(devRaw-.3)/1.5*100));
 
-  // NHTSA: 4/6 clues = BAC≥0.08 (88%). 이를 기준점으로 점수 보정
-  // totalClues/6 비율을 주 드라이버로, pursuit 지수함수 보조
-  const clueRatio = totalClues / 6;
-  const impairment = Math.min(100, Math.round(
-    Math.pow(Math.max(0, 1-Math.max(0,corr)), 1.5) * 55 + // Clue1 기반
-    c2 / 2 * 25 +   // Clue2: max deviation nystagmus
-    c3 / 2 * 20     // Clue3: early onset (BAC≥0.08 특이적)
-  ));
+  // 노이즈 바닥값 제거 후 점수 산출
+  // corr 0.85 이상 = 정상, 이하로 내려갈수록 취함 반영
+  // c2/c3: 카메라 노이즈 수준(28/18) 이하는 0점 처리
+  // 최종 ×1.43 스케일링으로 만취 시 100 도달
+  const corrFloor = 0.85;
+  const corrImpaired = Math.max(0, corrFloor - Math.max(0, corr));
+  const c2_imp = Math.min(2, Math.max(0, c2raw - 28) / 22 * 2);
+  const c3_imp = Math.min(2, Math.max(0, c3raw - 18) / 22 * 2);
+  const rawImpairment =
+    Math.pow(corrImpaired / corrFloor, 1.5) * 55 +
+    c2_imp / 2 * 25 +
+    c3_imp / 2 * 20;
+  const impairment = Math.min(100, Math.round(rawImpairment * 1.43));
 
   showResults({pursuit,nyst:c2raw,delay,deviation,impairment,
                c1,c2,c3,totalClues,gain,headStability,samples:valid});
@@ -837,7 +853,7 @@ function showResults(m){
   setPhase('results');
   document.getElementById('res-samples').textContent=m.samples.length;
   const sc=Math.min(100,Math.max(0,m.impairment));
-  const [t1,t2,t3,t4]=adaptiveThresh||[12,30,52,72];
+  const [t1,t2,t3,t4]=adaptiveThresh||[15,35,60,80];
   let color,verdict,vbg;
   if(sc<t1){color='#00d4aa';verdict='✅ 음주 징후 없음 — 정상 범위의 안구 추적 능력입니다';vbg='rgba(0,212,170,.08)';}
   else if(sc<t2){color='#ffd166';verdict='⚠️ 경미한 이상 — 일부 추적 불안정 요소가 감지됩니다';vbg='rgba(255,209,102,.08)';}
