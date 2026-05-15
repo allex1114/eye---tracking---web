@@ -288,7 +288,7 @@ let testActive=false,testStart=0,rafId=null;
 let samples=[],calibBuf=[],orientSign=0;
 let lastLM=null,faceOK=false,lastResult=null;
 let db=null,userConsented=false,adaptiveThresh=null,calibSampleCount=0;
-let sheetsSaved=false,autoSaveTimer=null,selfTimerInterval=null;
+let sheetsSaved=false,selfSaved=false,autoSaveTimer=null,selfTimerInterval=null;
 const video=document.getElementById('video');
 const setupCvs=document.getElementById('setup-canvas'); const sctx=setupCvs.getContext('2d');
 const testCvs=document.getElementById('test-canvas');   const tctx=testCvs.getContext('2d');
@@ -423,7 +423,10 @@ function fbGoTest(){setPhase('intro');}
 function skipFeedback(){setPhase('intro');}
 
 async function saveToSheets(selfPct){
-  if(sheetsSaved)return;
+  if(selfPct===null && sheetsSaved)return;
+  if(selfPct!==null && selfSaved)return;
+  if(selfPct===null)sheetsSaved=true;
+  else selfSaved=true;
   sheetsSaved=true;
   if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
   if(selfTimerInterval){clearInterval(selfTimerInterval);selfTimerInterval=null;}
@@ -489,13 +492,11 @@ function startAutoSaveTimer(){
 }
 
 function selectSelfAssess(val,btn){
-  if(sheetsSaved)return;
+  if(selfSaved)return;
   document.querySelectorAll('#self-assess-btns button').forEach(b=>{b.classList.remove('sel');b.disabled=true;});
   btn.classList.add('sel');
-  const timerEl=document.getElementById('self-timer');
   const saEl=document.getElementById('self-assess-saved');
-  if(timerEl)timerEl.textContent='';
-  if(saEl){saEl.style.color='var(--success)';saEl.textContent='✅ 저장됐습니다. 감사합니다!';}
+  if(saEl){saEl.style.color='var(--success)';saEl.textContent='✅ 감사합니다!';}
   saveToSheets(val);
 }
 
@@ -515,7 +516,16 @@ async function startSetup(){
     faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
     faceMesh.onResults(onResults);
     mpCam=new Camera(video,{onFrame:async()=>{if(faceMesh)await faceMesh.send({image:video});},width:640,height:480});
-    await mpCam.start(); updateStatus('카메라 연결됨. 얼굴을 화면에 맞춰주세요.','wait');
+    await mpCam.start();
+    video.addEventListener('loadedmetadata',()=>{
+      const vw=video.videoWidth,vh=video.videoHeight;
+      if(vw&&vh){
+        setupCvs.width=vw;setupCvs.height=vh;
+        document.querySelector('.cam-wrap').style.aspectRatio=vw+'/'+vh;
+        faceCvs.height=Math.round(faceCvs.width*vh/vw);
+      }
+    },{once:true});
+    updateStatus('카메라 연결됨. 얼굴을 화면에 맞춰주세요.','wait');
   }catch(e){updateStatus('오류: '+e.message,'err');}
 }
 function updateStatus(msg,state){
@@ -549,7 +559,7 @@ function checkLighting(){
 
 /* MEDIAPIPE */
 function onResults(res){
-  if(phase==='setup')drawSetup(res);
+  if(phase==='setup'){drawSetup(res);checkLighting();}
   if(phase==='test'){drawPip(res);if(testActive)collectSample(res);}
   const hasFace=res.multiFaceLandmarks&&res.multiFaceLandmarks.length>0;
   if(hasFace){
@@ -912,7 +922,7 @@ function showResults(m){
   if(saBtn)saBtn.querySelectorAll('button').forEach(b=>{b.classList.remove('sel');b.disabled=false;});
   const saEl=document.getElementById('self-assess-saved');if(saEl)saEl.textContent='';
   const timerEl=document.getElementById('self-timer');if(timerEl)timerEl.textContent='';
-  startAutoSaveTimer();
+  setTimeout(()=>saveToSheets(null),800);
 }
 function setMetric(id,val,pct,color){
   document.getElementById(id).textContent=val;
@@ -957,7 +967,7 @@ function resetApp(){
   userConsented=false;
   if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
   if(selfTimerInterval){clearInterval(selfTimerInterval);selfTimerInterval=null;}
-  sheetsSaved=false;
+  sheetsSaved=false; selfSaved=false;
   document.getElementById('fb-status').textContent='';
   document.getElementById('start-test-btn').disabled=true;
   fbState.type=null;fbState.soju=0;fbState.beer=0;fbState.mins=null;fbState.usualCapacity=null;fbState.selfAssessment=null;
