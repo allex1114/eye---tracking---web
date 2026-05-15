@@ -1202,7 +1202,12 @@ function selfieDraw(){
   ctx.fillText(cfg.sub, w/2, by+10+mfs*1.4);
   ctx.restore();
 
-  // Sticker
+  // Sticker — 로딩이 늦게 끝나도 준비되면 바로 반영
+  if(!currentSticker){
+    const lvIdx=SELFIE_CFG.indexOf(cfg);
+    const pool=stickerPools[lvIdx]||[];
+    if(pool.length>0) currentSticker=pool[Math.floor(Math.random()*pool.length)];
+  }
   if(currentSticker){
     const sw=w*.38;
     const sh=sw*(currentSticker.naturalHeight/currentSticker.naturalWidth);
