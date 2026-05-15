@@ -211,6 +211,8 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
       <div class="fb-dot" id="fbdot2">2</div>
       <div class="fb-line"></div>
       <div class="fb-dot" id="fbdot3">3</div>
+      <div class="fb-line"></div>
+      <div class="fb-dot" id="fbdot4">4</div>
     </div>
     <!-- STEP 1: 주종 -->
     <div class="fb-step show" id="fb-s1">
@@ -245,7 +247,26 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
         <button class="time-btn" onclick="fbTime(90,this)">1~2<br>시간</button>
         <button class="time-btn" onclick="fbTime(150,this)">2시간<br>이상</button>
       </div>
-      <button class="fb-next" id="fb-next3" onclick="fbSubmit()" disabled>제출하기 ✓</button>
+      <button class="fb-next" id="fb-next3" onclick="fbNext3()" disabled>다음 →</button>
+    </div>
+    <!-- STEP 4: 평소 주량 + 자가평가 -->
+    <div class="fb-step" id="fb-s4">
+      <h3 style="margin-bottom:10px;">평소 주량이 어떻게 되나요?</h3>
+      <div class="type-grid" style="margin-bottom:16px;" id="usual-btns">
+        <button class="type-btn" onclick="fbUsual('none',this)">🚫<br><span>거의 안 마심</span></button>
+        <button class="type-btn" onclick="fbUsual('light',this)">🥤<br><span>소주 반 병</span></button>
+        <button class="type-btn" onclick="fbUsual('moderate',this)">🍶<br><span>소주 1병</span></button>
+        <button class="type-btn" onclick="fbUsual('heavy',this)">🍾<br><span>소주 2병+</span></button>
+      </div>
+      <h3 style="margin-bottom:10px;">지금 얼마나 취한 것 같나요?</h3>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:4px;" id="self-btns">
+        <button class="type-btn" onclick="fbSelf(0,this)">😊<br><span>멀쩡</span></button>
+        <button class="type-btn" onclick="fbSelf(25,this)">🙂<br><span>약간</span></button>
+        <button class="type-btn" onclick="fbSelf(50,this)">😅<br><span>보통</span></button>
+        <button class="type-btn" onclick="fbSelf(75,this)">😵<br><span>많이</span></button>
+        <button class="type-btn" onclick="fbSelf(100,this)">🥴<br><span>매우</span></button>
+      </div>
+      <button class="fb-next" id="fb-next4" onclick="fbSubmit()" disabled>제출하기 ✓</button>
     </div>
     <button class="btn-ghost" style="margin-top:14px;font-size:.85rem;padding:8px 20px;" onclick="skipFeedback()">건너뛰기</button>
     <p id="fb-status" style="color:var(--success);font-size:.82rem;margin-top:10px;min-height:18px;"></p>
@@ -260,6 +281,7 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
 <script>
 'use strict';
 const CFG={TEST_DURATION_MS:12000,CALIB_DURATION_S:2,STIM_AMPLITUDE:.37,STIM_FREQ_HZ:.40,DOT_R:18,MIN_VALID:60};
+const SHEETS_URL='https://script.google.com/macros/s/AKfycbwdp9zc2xzWrJDGgDetx97tXHBswZ3ku4W6YBBKTUUBud1Bgs3RygNte8OnB7onwstwWQ/exec';
 let faceMesh=null,mpCam=null,phase='loading';
 // Kalman Filter for iris tracking (replaces EMA)
 let kalman = null;
@@ -327,10 +349,10 @@ function setConsent(agreed){
 }
 
 /* FEEDBACK — 다단계 (주종/음주량/경과시간) */
-const fbState={type:null,soju:0,beer:0,mins:null};
+const fbState={type:null,soju:0,beer:0,mins:null,usualCapacity:null,selfAssessment:null};
 
 function fbShowStep(n){
-  [1,2,3].forEach(i=>{
+  [1,2,3,4].forEach(i=>{
     document.getElementById('fb-s'+i).classList.toggle('show',i===n);
     const d=document.getElementById('fbdot'+i);
     d.classList.toggle('active',i===n);
@@ -340,7 +362,7 @@ function fbShowStep(n){
 
 function fbType(type){
   fbState.type=type; fbState.soju=0; fbState.beer=0;
-  if(type==='none'){fbSubmit();return;}
+  if(type==='none'){fbShowStep(4);return;}
   // 음주량 화면 구성
   const ss=document.getElementById('fb-amt-soju'),sb=document.getElementById('fb-amt-beer');
   ss.style.display=(type==='soju'||type==='both')?'block':'none';
@@ -373,6 +395,22 @@ function fbAmt(kind,val,btn){
 }
 
 function fbNext2(){fbShowStep(3);}
+function fbNext3(){fbShowStep(4);}
+function fbUsual(val,btn){
+  fbState.usualCapacity=val;
+  document.querySelectorAll('#usual-btns .type-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  checkFbNext4();
+}
+function fbSelf(val,btn){
+  fbState.selfAssessment=val;
+  document.querySelectorAll('#self-btns .type-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  checkFbNext4();
+}
+function checkFbNext4(){
+  document.getElementById('fb-next4').disabled=!(fbState.usualCapacity!==null&&fbState.selfAssessment!==null);
+}
 
 function fbTime(mins,btn){
   fbState.mins=mins;
@@ -382,15 +420,19 @@ function fbTime(mins,btn){
 }
 
 async function fbSubmit(){
-  if(!db||!lastResult){skipFeedback();return;}
+  if(!lastResult){skipFeedback();return;}
   document.getElementById('fb-status').textContent='전송 중...';
   document.querySelectorAll('.type-btn,.amt-btn,.time-btn,.fb-next').forEach(b=>b.disabled=true);
-  // 순알코올 계산 (소주잔:6.7g, 맥주잔:17.8g)
   const totalGrams=fbState.soju*6.7+fbState.beer*17.8;
-  // selfReported: 0=절주, 1=경미(~20g), 2=보통(~40g), 3=많이(40g+)
   const selfReported=totalGrams<1?0:totalGrams<20?1:totalGrams<40?2:3;
-  try{
-    await db.collection('hgn_records').add({
+  const usualMap={none:'거의 안 마심',light:'소주 반 병',moderate:'소주 1병',heavy:'소주 2병+'};
+  const drinksText=fbState.type==='none'?'안 마심':
+    [(fbState.soju>0?'소주 '+fbState.soju+'잔':''),(fbState.beer>0?'맥주 '+fbState.beer+'잔':'')].filter(Boolean).join(' + ');
+  const selfPct=fbState.selfAssessment!==null?fbState.selfAssessment:null;
+  const matchEval=selfPct!==null?Math.round(100-Math.abs(lastResult.sc-selfPct)):null;
+  const promises=[];
+  if(db){
+    promises.push(db.collection('hgn_records').add({
       timestamp:firebase.firestore.FieldValue.serverTimestamp(),
       pursuit:Math.round(lastResult.pursuit*10)/10,
       nyst:Math.round(lastResult.nyst*10)/10,
@@ -403,8 +445,24 @@ async function fbSubmit(){
       beerGlasses:fbState.beer,
       totalGrams:Math.round(totalGrams*10)/10,
       minutesSince:fbState.mins||0,
-      version:'1.4'
-    });
+      version:'1.5'
+    }).catch(e=>console.warn('Firebase:',e)));
+  }
+  promises.push(fetch(SHEETS_URL,{
+    method:'POST',mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      timestamp:new Date().toISOString(),
+      impairment_pct:lastResult.sc,
+      usual_capacity:usualMap[fbState.usualCapacity]||'미입력',
+      drinks_consumed:drinksText,
+      elapsed_minutes:fbState.mins||0,
+      self_assessment:selfPct!==null?selfPct:'미입력',
+      match_eval:matchEval!==null?matchEval:'미입력'
+    })
+  }).catch(e=>console.warn('Sheets:',e)));
+  try{
+    await Promise.all(promises);
     document.getElementById('fb-status').textContent='✅ 감사합니다! 모델 개선에 기여하셨습니다.';
     setTimeout(()=>resetApp(),1800);
   }catch(e){
@@ -807,7 +865,7 @@ function showResults(m){
   }
   lastResult={...m,verdict,sc};
   setTimeout(()=>drawChart(m.samples),200);
-  if(userConsented)setTimeout(()=>{const n=document.getElementById('feedback-nudge');if(n)n.style.display='block';},3000);
+  setTimeout(()=>{const n=document.getElementById('feedback-nudge');if(n)n.style.display='block';},3000);
 }
 function setMetric(id,val,pct,color){
   document.getElementById(id).textContent=val;
@@ -854,7 +912,7 @@ function resetApp(){
   document.getElementById('fb-status').textContent='';
   document.getElementById('start-test-btn').disabled=true;
   // fbState 초기화
-  fbState.type=null;fbState.soju=0;fbState.beer=0;fbState.mins=null;
+  fbState.type=null;fbState.soju=0;fbState.beer=0;fbState.mins=null;fbState.usualCapacity=null;fbState.selfAssessment=null;
   fbShowStep(1);
   setPhase('consent'); // 매번 동의 화면부터
 }
