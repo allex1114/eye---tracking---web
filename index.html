@@ -450,7 +450,7 @@ async function fbSubmit(){
   }
   promises.push(fetch(SHEETS_URL,{
     method:'POST',mode:'no-cors',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({
       timestamp:new Date().toISOString(),
       impairment_pct:lastResult.sc,
