@@ -1075,11 +1075,12 @@ async function preloadStickers(){
     for(let i=1;i<=30;i++){
       let loaded=null;
       for(const ext of exts){
+        const src=`stickers/lv${lv}/${i}.${ext}`;
         loaded=await new Promise(res=>{
           const img=new Image();
-          img.onload=()=>res(img);
+          img.onload=()=>{console.log('✅ 스티커 로드됨:',src);res(img);}
           img.onerror=()=>res(null);
-          img.src=`stickers/lv${lv}/${i}.${ext}`;
+          img.src=src;
         });
         if(loaded) break;
       }
@@ -1087,6 +1088,7 @@ async function preloadStickers(){
       stickerPools[lv].push(loaded);
     }
   }
+  console.log('스티커 풀 완료:', stickerPools.map(p=>p.length));
 }
 
 const SELFIE_CFG=[
