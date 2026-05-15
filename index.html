@@ -1066,6 +1066,28 @@ window.addEventListener('resize',()=>{if(phase==='test'){testCvs.width=window.in
 
 /* ── SELFIE / FILTER ────────────────────────────────── */
 let selfieRAF=null, selfieParticles=[], selfieLastSpawn=0, capturedBlob=null, selfieScore=0;
+const stickerPools=[[], [], [], [], []];
+let currentSticker=null;
+
+async function preloadStickers(){
+  const exts=['jpg','jpeg','png','webp','gif'];
+  for(let lv=0;lv<=4;lv++){
+    for(let i=1;i<=30;i++){
+      let loaded=null;
+      for(const ext of exts){
+        loaded=await new Promise(res=>{
+          const img=new Image();
+          img.onload=()=>res(img);
+          img.onerror=()=>res(null);
+          img.src=`stickers/lv${lv}/${i}.${ext}`;
+        });
+        if(loaded) break;
+      }
+      if(!loaded) break;
+      stickerPools[lv].push(loaded);
+    }
+  }
+}
 
 const SELFIE_CFG=[
   {max:15,  label:'오늘 완전 멀쩡 😎',      sub:'오늘 대리 안 불러도 됨',       filter:'brightness(1.05) saturate(1.1)',                         tint:null,                      emojis:['✨','🌟','😎','💎'],       spawnMs:800, wobble:0},
@@ -1103,6 +1125,9 @@ function srRect(ctx,x,y,w,h,r){
 function initSelfieSection(score){
   selfieScore=score; capturedBlob=null;
   const cfg=SELFIE_CFG.find(c=>score<c.max)||SELFIE_CFG[SELFIE_CFG.length-1];
+  const lvIdx=SELFIE_CFG.indexOf(cfg);
+  const pool=stickerPools[lvIdx]||[];
+  currentSticker=pool.length>0?pool[Math.floor(Math.random()*pool.length)]:null;
   const sec=document.getElementById('selfie-section'); if(sec) sec.style.display='block';
   const cvs=document.getElementById('selfie-canvas'); if(!cvs) return;
   const vw=video.videoWidth||640, vh=video.videoHeight||480;
@@ -1177,6 +1202,22 @@ function selfieDraw(){
   ctx.fillText(cfg.sub, w/2, by+10+mfs*1.4);
   ctx.restore();
 
+  // Sticker
+  if(currentSticker){
+    const sw=w*.38;
+    const sh=sw*(currentSticker.naturalHeight/currentSticker.naturalWidth);
+    const sx=10, sy=h-sh-10;
+    ctx.save();
+    ctx.translate(sx+sw/2, sy+sh/2);
+    ctx.rotate(-0.06);
+    ctx.shadowColor='rgba(0,0,0,0.45)'; ctx.shadowBlur=12; ctx.shadowOffsetX=3; ctx.shadowOffsetY=3;
+    ctx.fillStyle='#fff';
+    ctx.fillRect(-sw/2-5,-sh/2-5,sw+10,sh+10);
+    ctx.shadowColor='transparent';
+    ctx.drawImage(currentSticker,-sw/2,-sh/2,sw,sh);
+    ctx.restore();
+  }
+
   // Watermark
   ctx.save(); ctx.fillStyle='rgba(255,255,255,0.35)';
   ctx.font=Math.max(10,h*.022)+'px Segoe UI'; ctx.textAlign='right'; ctx.textBaseline='bottom';
@@ -1223,11 +1264,11 @@ function downloadSelfie(){
 
 /* INIT */
 window.addEventListener('load',()=>{
+  preloadStickers();
   const check=setInterval(()=>{
     if(typeof FaceMesh!=='undefined'&&typeof Camera!=='undefined'){
       clearInterval(check);
       document.getElementById('loading').style.display='none';
-      // 매번 동의 화면 표시 (다른 사람도 같은 폰으로 사용할 수 있으므로)
       setPhase('consent');
     }
   },200);
