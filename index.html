@@ -185,9 +185,16 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
     </div>
     <div class="m-card" id="nhtsa-clues" style="margin-bottom:14px;"></div>
     <div class="chart-card"><div class="chart-title">▎ 자극 경로 vs 눈 추적 경로</div><canvas id="res-chart" height="90"></canvas></div>
-    <div id="feedback-nudge" class="feedback-nudge" style="display:none;">
-      <p style="font-size:.85rem;color:var(--success);margin-bottom:10px;">🧠 실제 음주량을 알려주시면 AI 모델이 더 정확해집니다!</p>
-      <button class="btn" style="padding:10px 28px;font-size:.9rem;" onclick="setPhase('feedback')">음주량 입력하기</button>
+    <div id="self-assess-section" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;text-align:center;">
+      <p style="font-size:.85rem;color:var(--dim);margin-bottom:12px;">지금 얼마나 취한 것 같나요? <span id="self-timer" style="color:var(--accent);font-size:.78rem;font-family:'Courier New',monospace;"></span></p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;" id="self-assess-btns">
+        <button class="time-btn" style="padding:10px 16px;" onclick="selectSelfAssess(0,this)">😊<br><span>멀쩡</span></button>
+        <button class="time-btn" style="padding:10px 16px;" onclick="selectSelfAssess(25,this)">🙂<br><span>약간</span></button>
+        <button class="time-btn" style="padding:10px 16px;" onclick="selectSelfAssess(50,this)">😅<br><span>보통</span></button>
+        <button class="time-btn" style="padding:10px 16px;" onclick="selectSelfAssess(75,this)">😵<br><span>많이</span></button>
+        <button class="time-btn" style="padding:10px 16px;" onclick="selectSelfAssess(100,this)">🥴<br><span>매우</span></button>
+      </div>
+      <p id="self-assess-saved" style="font-size:.8rem;margin-top:10px;min-height:18px;"></p>
     </div>
     <div class="res-footer">
       <div class="footer-btns">
@@ -201,9 +208,9 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
 
 <div id="phase-feedback" class="phase">
   <div class="feedback-card">
-    <div style="font-size:2rem;margin-bottom:10px">🙏</div>
-    <h2 style="font-size:1.3rem;margin-bottom:6px;">실제 음주 정보 입력</h2>
-    <p style="color:var(--dim);font-size:.82rem;line-height:1.5;margin-bottom:16px;">AI 모델 개선에 도움이 됩니다. 익명 처리됩니다.</p>
+    <div style="font-size:2rem;margin-bottom:10px">🍶</div>
+    <h2 style="font-size:1.3rem;margin-bottom:6px;">테스트 전 음주 정보 입력</h2>
+    <p style="color:var(--dim);font-size:.82rem;line-height:1.5;margin-bottom:16px;">결과 정확도 향상에 사용됩니다. 익명 처리됩니다.</p>
     <!-- 진행 표시 -->
     <div class="fb-progress">
       <div class="fb-dot active" id="fbdot1">1</div>
@@ -249,7 +256,7 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
       </div>
       <button class="fb-next" id="fb-next3" onclick="fbNext3()" disabled>다음 →</button>
     </div>
-    <!-- STEP 4: 평소 주량 + 자가평가 -->
+    <!-- STEP 4: 평소 주량 -->
     <div class="fb-step" id="fb-s4">
       <h3 style="margin-bottom:10px;">평소 주량이 어떻게 되나요?</h3>
       <div class="type-grid" style="margin-bottom:16px;" id="usual-btns">
@@ -258,15 +265,7 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
         <button class="type-btn" onclick="fbUsual('moderate',this)">🍶<br><span>소주 1병</span></button>
         <button class="type-btn" onclick="fbUsual('heavy',this)">🍾<br><span>소주 2병+</span></button>
       </div>
-      <h3 style="margin-bottom:10px;">지금 얼마나 취한 것 같나요?</h3>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:4px;" id="self-btns">
-        <button class="type-btn" onclick="fbSelf(0,this)">😊<br><span>멀쩡</span></button>
-        <button class="type-btn" onclick="fbSelf(25,this)">🙂<br><span>약간</span></button>
-        <button class="type-btn" onclick="fbSelf(50,this)">😅<br><span>보통</span></button>
-        <button class="type-btn" onclick="fbSelf(75,this)">😵<br><span>많이</span></button>
-        <button class="type-btn" onclick="fbSelf(100,this)">🥴<br><span>매우</span></button>
-      </div>
-      <button class="fb-next" id="fb-next4" onclick="fbSubmit()" disabled>제출하기 ✓</button>
+      <button class="fb-next" id="fb-next4" onclick="fbGoTest()" disabled>테스트 시작하기 →</button>
     </div>
     <button class="btn-ghost" style="margin-top:14px;font-size:.85rem;padding:8px 20px;" onclick="skipFeedback()">건너뛰기</button>
     <p id="fb-status" style="color:var(--success);font-size:.82rem;margin-top:10px;min-height:18px;"></p>
@@ -289,6 +288,7 @@ let testActive=false,testStart=0,rafId=null;
 let samples=[],calibBuf=[],orientSign=0;
 let lastLM=null,faceOK=false,lastResult=null;
 let db=null,userConsented=false,adaptiveThresh=null,calibSampleCount=0;
+let sheetsSaved=false,autoSaveTimer=null,selfTimerInterval=null;
 const video=document.getElementById('video');
 const setupCvs=document.getElementById('setup-canvas'); const sctx=setupCvs.getContext('2d');
 const testCvs=document.getElementById('test-canvas');   const tctx=testCvs.getContext('2d');
@@ -345,7 +345,7 @@ function removeIQR(s){
 function setConsent(agreed){
   userConsented=agreed;
   if(agreed)initFirebase();
-  setPhase('intro');
+  setPhase('feedback');
 }
 
 /* FEEDBACK — 다단계 (주종/음주량/경과시간) */
@@ -409,7 +409,7 @@ function fbSelf(val,btn){
   checkFbNext4();
 }
 function checkFbNext4(){
-  document.getElementById('fb-next4').disabled=!(fbState.usualCapacity!==null&&fbState.selfAssessment!==null);
+  document.getElementById('fb-next4').disabled=fbState.usualCapacity===null;
 }
 
 function fbTime(mins,btn){
@@ -419,16 +419,20 @@ function fbTime(mins,btn){
   document.getElementById('fb-next3').disabled=false;
 }
 
-async function fbSubmit(){
-  if(!lastResult){skipFeedback();return;}
-  document.getElementById('fb-status').textContent='전송 중...';
-  document.querySelectorAll('.type-btn,.amt-btn,.time-btn,.fb-next').forEach(b=>b.disabled=true);
+function fbGoTest(){setPhase('intro');}
+function skipFeedback(){setPhase('intro');}
+
+async function saveToSheets(selfPct){
+  if(sheetsSaved)return;
+  sheetsSaved=true;
+  if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
+  if(selfTimerInterval){clearInterval(selfTimerInterval);selfTimerInterval=null;}
+  if(!lastResult)return;
+  const usualMap={none:'거의 안 마심',light:'소주 반 병',moderate:'소주 1병',heavy:'소주 2병+'};
   const totalGrams=fbState.soju*6.7+fbState.beer*17.8;
   const selfReported=totalGrams<1?0:totalGrams<20?1:totalGrams<40?2:3;
-  const usualMap={none:'거의 안 마심',light:'소주 반 병',moderate:'소주 1병',heavy:'소주 2병+'};
-  const drinksText=fbState.type==='none'?'안 마심':
+  const drinksText=fbState.type==='none'||!fbState.type?'안 마심':
     [(fbState.soju>0?'소주 '+fbState.soju+'잔':''),(fbState.beer>0?'맥주 '+fbState.beer+'잔':'')].filter(Boolean).join(' + ');
-  const selfPct=fbState.selfAssessment!==null?fbState.selfAssessment:null;
   const matchEval=selfPct!==null?Math.round(100-Math.abs(lastResult.sc-selfPct)):null;
   const promises=[];
   if(db){
@@ -440,7 +444,7 @@ async function fbSubmit(){
       deviation:Math.round(lastResult.deviation*10)/10,
       impairment:lastResult.sc,
       selfReported,
-      drinkType:['none','soju','beer','both'].indexOf(fbState.type),
+      drinkType:['none','soju','beer','both'].indexOf(fbState.type||'none'),
       sojuGlasses:fbState.soju,
       beerGlasses:fbState.beer,
       totalGrams:Math.round(totalGrams*10)/10,
@@ -461,16 +465,39 @@ async function fbSubmit(){
       match_eval:matchEval!==null?matchEval:'미입력'
     })
   }).catch(e=>console.warn('Sheets:',e)));
-  try{
-    await Promise.all(promises);
-    document.getElementById('fb-status').textContent='✅ 감사합니다! 모델 개선에 기여하셨습니다.';
-    setTimeout(()=>resetApp(),1800);
-  }catch(e){
-    document.getElementById('fb-status').textContent='전송 실패. 건너뜁니다.';
-    setTimeout(()=>resetApp(),1500);
-  }
+  await Promise.all(promises).catch(()=>{});
 }
-function skipFeedback(){resetApp();}
+
+function startAutoSaveTimer(){
+  sheetsSaved=false;
+  let remaining=30;
+  const timerEl=document.getElementById('self-timer');
+  const saEl=document.getElementById('self-assess-saved');
+  if(timerEl)timerEl.textContent='('+remaining+'초 후 자동 저장)';
+  selfTimerInterval=setInterval(()=>{
+    remaining--;
+    if(timerEl)timerEl.textContent='('+remaining+'초 후 자동 저장)';
+    if(remaining<=0){clearInterval(selfTimerInterval);selfTimerInterval=null;}
+  },1000);
+  autoSaveTimer=setTimeout(()=>{
+    if(!sheetsSaved){
+      if(timerEl)timerEl.textContent='';
+      if(saEl){saEl.style.color='var(--dim)';saEl.textContent='자동 저장됨';}
+      saveToSheets(null);
+    }
+  },30000);
+}
+
+function selectSelfAssess(val,btn){
+  if(sheetsSaved)return;
+  document.querySelectorAll('#self-assess-btns button').forEach(b=>{b.classList.remove('sel');b.disabled=true;});
+  btn.classList.add('sel');
+  const timerEl=document.getElementById('self-timer');
+  const saEl=document.getElementById('self-assess-saved');
+  if(timerEl)timerEl.textContent='';
+  if(saEl){saEl.style.color='var(--success)';saEl.textContent='✅ 저장됐습니다. 감사합니다!';}
+  saveToSheets(val);
+}
 
 /* SETUP */
 async function startSetup(){
@@ -865,7 +892,11 @@ function showResults(m){
   }
   lastResult={...m,verdict,sc};
   setTimeout(()=>drawChart(m.samples),200);
-  setTimeout(()=>{const n=document.getElementById('feedback-nudge');if(n)n.style.display='block';},3000);
+  const saBtn=document.getElementById('self-assess-btns');
+  if(saBtn)saBtn.querySelectorAll('button').forEach(b=>{b.classList.remove('sel');b.disabled=false;});
+  const saEl=document.getElementById('self-assess-saved');if(saEl)saEl.textContent='';
+  const timerEl=document.getElementById('self-timer');if(timerEl)timerEl.textContent='';
+  startAutoSaveTimer();
 }
 function setMetric(id,val,pct,color){
   document.getElementById(id).textContent=val;
@@ -907,14 +938,18 @@ function fallbackCopy(text){
 /* RESET */
 function resetApp(){
   cancelAnimationFrame(rafId);testActive=false;samples=[];calibBuf=[];orientSign=0;faceOK=false;if(kalman)kalman.reset();
-  userConsented=false; // 매번 동의 초기화
-  const n=document.getElementById('feedback-nudge');if(n)n.style.display='none';
+  userConsented=false;
+  if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
+  if(selfTimerInterval){clearInterval(selfTimerInterval);selfTimerInterval=null;}
+  sheetsSaved=false;
   document.getElementById('fb-status').textContent='';
   document.getElementById('start-test-btn').disabled=true;
-  // fbState 초기화
   fbState.type=null;fbState.soju=0;fbState.beer=0;fbState.mins=null;fbState.usualCapacity=null;fbState.selfAssessment=null;
+  const saBtn=document.getElementById('self-assess-btns');
+  if(saBtn)saBtn.querySelectorAll('button').forEach(b=>{b.classList.remove('sel');b.disabled=false;});
+  const saEl=document.getElementById('self-assess-saved');if(saEl)saEl.textContent='';
   fbShowStep(1);
-  setPhase('consent'); // 매번 동의 화면부터
+  setPhase('consent');
 }
 
 /* MATH */
