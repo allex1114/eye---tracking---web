@@ -221,6 +221,10 @@ h1 { font-size:1.9rem; font-weight:800; margin-bottom:6px; background:linear-gra
         <button class="btn-ghost" onclick="resetApp()">↺ 다시 테스트</button>
       </div>
       <p class="small-note">⚠️ 이 결과는 교육 목적으로만 사용하세요.<br>실제 음주 판정은 공인 측정 기기로만 가능합니다.</p>
+      <p style="color:var(--dim);font-size:.72rem;margin-top:18px;line-height:1.8;border-top:1px solid var(--border);padding-top:14px;">
+        제작: 테크노경영학(202610HY10662) 3조<br>
+        김연준 · 윤종훈 · 장유진 · 정현준 · 황승환
+      </p>
     </div>
   </div>
 </div>
@@ -1068,6 +1072,7 @@ window.addEventListener('resize',()=>{if(phase==='test'){testCvs.width=window.in
 let selfieRAF=null, selfieParticles=[], selfieLastSpawn=0, capturedBlob=null, selfieScore=0;
 const stickerPools=[[], [], [], [], []];
 let currentSticker=null;
+let stickerReady=null; // preload 완료 Promise
 
 async function preloadStickers(){
   const exts=['jpg','jpeg','png','webp','gif'];
@@ -1078,7 +1083,7 @@ async function preloadStickers(){
         const src=`stickers/lv${lv}/${i}.${ext}`;
         loaded=await new Promise(res=>{
           const img=new Image();
-          img.onload=()=>{console.log('✅ 스티커 로드됨:',src);res(img);}
+          img.onload=()=>res(img);
           img.onerror=()=>res(null);
           img.src=src;
         });
@@ -1088,7 +1093,6 @@ async function preloadStickers(){
       stickerPools[lv].push(loaded);
     }
   }
-  console.log('스티커 풀 완료:', stickerPools.map(p=>p.length));
 }
 
 const SELFIE_CFG=[
@@ -1124,10 +1128,11 @@ function srRect(ctx,x,y,w,h,r){
   ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
 }
 
-function initSelfieSection(score){
+async function initSelfieSection(score){
   selfieScore=score; capturedBlob=null;
   const cfg=SELFIE_CFG.find(c=>score<c.max)||SELFIE_CFG[SELFIE_CFG.length-1];
   const lvIdx=SELFIE_CFG.indexOf(cfg);
+  if(stickerReady) await stickerReady; // 모든 이미지 로딩 완료 대기
   const pool=stickerPools[lvIdx]||[];
   currentSticker=pool.length>0?pool[Math.floor(Math.random()*pool.length)]:null;
   const sec=document.getElementById('selfie-section'); if(sec) sec.style.display='block';
@@ -1205,14 +1210,6 @@ function selfieDraw(){
   ctx.restore();
 
   // Sticker
-  if(!currentSticker){
-    const lvIdx=SELFIE_CFG.indexOf(cfg);
-    const pool=stickerPools[lvIdx]||[];
-    if(pool.length>0){
-      currentSticker=pool[Math.floor(Math.random()*pool.length)];
-      console.log('스티커 선택 lv'+lvIdx, currentSticker.naturalWidth+'x'+currentSticker.naturalHeight);
-    }
-  }
   if(currentSticker&&currentSticker.naturalWidth>0){
     const sw=Math.round(w*.38);
     const sh=Math.round(sw*currentSticker.naturalHeight/currentSticker.naturalWidth);
@@ -1275,7 +1272,7 @@ function downloadSelfie(){
 
 /* INIT */
 window.addEventListener('load',()=>{
-  preloadStickers();
+  stickerReady=preloadStickers();
   const check=setInterval(()=>{
     if(typeof FaceMesh!=='undefined'&&typeof Camera!=='undefined'){
       clearInterval(check);
