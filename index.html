@@ -312,7 +312,8 @@ let testActive=false,testStart=0,rafId=null;
 let samples=[],calibBuf=[],orientSign=0;
 let lastLM=null,faceOK=false,lastResult=null;
 let db=null,userConsented=false,adaptiveThresh=null,calibSampleCount=0;
-let sheetsSaved=false,selfSaved=false,autoSaveTimer=null,selfTimerInterval=null;
+let baseSaved=false,selfSaved=false,autoSaveTimer=null,selfTimerInterval=null;
+let sessionId=null;
 const video=document.getElementById('video');
 const setupCvs=document.getElementById('setup-canvas'); const sctx=setupCvs.getContext('2d');
 const testCvs=document.getElementById('test-canvas');   const tctx=testCvs.getContext('2d');
@@ -447,13 +448,10 @@ function fbGoTest(){setPhase('intro');}
 function skipFeedback(){setPhase('intro');}
 
 async function saveToSheets(selfPct){
-  if(selfPct===null && sheetsSaved)return;
-  if(selfPct!==null && selfSaved)return;
-  if(selfPct===null)sheetsSaved=true;
+  if(selfPct===null && baseSaved) return;
+  if(selfPct!==null && selfSaved) return;
+  if(selfPct===null) baseSaved=true;
   else selfSaved=true;
-  sheetsSaved=true;
-  if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
-  if(selfTimerInterval){clearInterval(selfTimerInterval);selfTimerInterval=null;}
   if(!lastResult)return;
   const usualMap={none:'거의 안 마심',light:'소주 반 병',moderate:'소주 1병',heavy:'소주 2병+'};
   const totalGrams=fbState.soju*6.7+fbState.beer*17.8;
@@ -483,6 +481,7 @@ async function saveToSheets(selfPct){
     method:'POST',mode:'no-cors',
     headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({
+      session_id:sessionId,
       timestamp:new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),
       impairment_pct:lastResult.sc,
       usual_capacity:usualMap[fbState.usualCapacity]||'미입력',
@@ -496,8 +495,7 @@ async function saveToSheets(selfPct){
 }
 
 function startAutoSaveTimer(){
-  sheetsSaved=false;
-  let remaining=30;
+  let remaining=20;
   const timerEl=document.getElementById('self-timer');
   const saEl=document.getElementById('self-assess-saved');
   if(timerEl)timerEl.textContent='('+remaining+'초 후 자동 저장)';
@@ -507,12 +505,12 @@ function startAutoSaveTimer(){
     if(remaining<=0){clearInterval(selfTimerInterval);selfTimerInterval=null;}
   },1000);
   autoSaveTimer=setTimeout(()=>{
-    if(!sheetsSaved){
+    if(!dataSaved){
       if(timerEl)timerEl.textContent='';
       if(saEl){saEl.style.color='var(--dim)';saEl.textContent='자동 저장됨';}
       saveToSheets(null);
     }
-  },30000);
+  },20000);
 }
 
 function selectSelfAssess(val,btn){
@@ -946,6 +944,7 @@ function showResults(m){
   if(saBtn)saBtn.querySelectorAll('button').forEach(b=>{b.classList.remove('sel');b.disabled=false;});
   const saEl=document.getElementById('self-assess-saved');if(saEl)saEl.textContent='';
   const timerEl=document.getElementById('self-timer');if(timerEl)timerEl.textContent='';
+  sessionId=Math.random().toString(36).substr(2,9);
   setTimeout(()=>saveToSheets(null),800);
   setTimeout(()=>initSelfieSection(sc),600);
 }
@@ -992,7 +991,7 @@ function resetApp(){
   userConsented=false;
   if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
   if(selfTimerInterval){clearInterval(selfTimerInterval);selfTimerInterval=null;}
-  sheetsSaved=false; selfSaved=false;
+  baseSaved=false; selfSaved=false; sessionId=null;
   stopSelfie();
   document.getElementById('fb-status').textContent='';
   document.getElementById('start-test-btn').disabled=true;
